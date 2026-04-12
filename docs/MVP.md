@@ -8,7 +8,7 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 - USB-hosted assistant CLI shell.
 - Strict parser for a very small approved command set.
 - Deterministic execution engine.
-- Excel adapter interface with a safe stub implementation.
+- Excel adapter interface with a safe stub implementation for WSL and a Windows COM-backed implementation for object-level Excel control.
 - Unsupported-command proposal logging.
 - Parser and execution tests.
 
@@ -29,9 +29,8 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 - `next row from start`
 
 ## Ordered next implementation steps
-1. Replace the stub Excel adapter with a Windows COM-backed adapter behind the same interface.
-2. Add workbook, worksheet, and active-context models so commands can target explicit Excel state.
-3. Expand the parser with a reviewed command grammar for workbook open/save/select actions.
-4. Add starter configuration loading and USB metadata validation beyond a single trust marker.
-5. Introduce a speech-to-text adapter that outputs plain text into the same deterministic parser path.
-6. Add structured proposal review tooling so unsupported commands can become reviewed grammar additions.
+1. Add workbook, worksheet, and active-context models so commands can target explicit Excel state.
+2. Expand the parser with a reviewed command grammar for workbook open/save/select actions.
+3. Add starter configuration loading and USB metadata validation beyond a single trust marker.
+4. Introduce a speech-to-text adapter that outputs plain text into the same deterministic parser path.
+5. Add structured proposal review tooling so unsupported commands can become reviewed grammar additions.

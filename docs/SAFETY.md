@@ -20,6 +20,8 @@
 - Prefer object-level Excel APIs.
 - Do not default to blind keyboard or mouse automation.
 - Keep workbook mutation commands narrow and explicit.
+- Use the stub adapter by default in WSL so automated tests do not depend on a live Excel process.
+- Require explicit adapter selection before using the Windows COM path.
 
 ## AI safety for early phases
 - AI may help draft reviewed proposals later, but phase 1 does not allow live self-modifying code.

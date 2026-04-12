@@ -9,6 +9,9 @@ description = "Windows-first USB-portable voice automation scaffold with determi
 readme = "README.md"
 requires-python = ">=3.12"
 
+[project.optional-dependencies]
+windows = ["pywin32>=306; platform_system=='Windows'"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

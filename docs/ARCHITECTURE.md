@@ -43,8 +43,10 @@ Phase 1 is deterministic by design.
 - Windows is the target runtime for the starter and future Excel COM integration.
 - WSL is the development environment.
 - The repository keeps Windows-sensitive logic behind small interfaces so unit tests can run in WSL.
+- Adapter selection is explicit so the assistant can stay on the stub adapter in WSL and switch to the COM adapter on Windows when requested.
 
 ## Excel strategy
 - Preferred path: COM or object-level APIs through a dedicated adapter.
 - Deferred path: keyboard or mouse fallback only if an operation cannot be achieved safely through object control.
-- Phase 1 ships only a stub adapter so parser and execution logic can be built and tested first.
+- The stub adapter remains the default path for WSL development and automated tests.
+- The Windows COM adapter now implements the current deterministic command slice behind the same interface.
