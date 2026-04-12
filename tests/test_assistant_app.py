@@ -75,6 +75,21 @@ class AssistantAppTests(unittest.TestCase):
             self.assertEqual(risky_result, "Desktop action is not approved in MVP: shutdown")
             self.assertFalse(proposal_path.exists())
 
+    def test_app_handles_workflow_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            excel = StubExcelAdapter()
+            app = AssistantApp(proposal_path=proposal_path, excel=excel)
+
+            app.handle_text("go to A5")
+            result = app.handle_text("mark fail and next row")
+
+            self.assertEqual(
+                result,
+                "Workflow 'mark_fail_and_next_row' completed. Final result: Moved to next row start at A6",
+            )
+            self.assertEqual(excel.cells["A5"], "fail")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from voice_control_usb.core.models import Command
+from voice_control_usb.core.workflows import WorkflowRegistry
 from voice_control_usb.desktop.adapter import DesktopAdapter
 from voice_control_usb.excel.adapter import ExcelAdapter
 
@@ -12,10 +13,16 @@ from voice_control_usb.excel.adapter import ExcelAdapter
 class ExecutionEngine:
     """Route parsed commands to approved execution handlers."""
 
-    def __init__(self, excel: ExcelAdapter, desktop: DesktopAdapter) -> None:
+    def __init__(
+        self,
+        excel: ExcelAdapter,
+        desktop: DesktopAdapter,
+        workflow_registry: WorkflowRegistry | None = None,
+    ) -> None:
         self.excel = excel
         self.desktop = desktop
         self.handlers: dict[str, Callable[[Command], str]] = {
+            "run_workflow": self._handle_run_workflow,
             "open_excel": self._handle_open_excel,
             "open_app": self._handle_open_app,
             "open_url": self._handle_open_url,
@@ -31,6 +38,8 @@ class ExecutionEngine:
             "go_down": self._handle_go_down,
             "next_row_from_start": self._handle_next_row_from_start,
         }
+        self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
+        self.workflow_registry.validate(self._workflow_allowed_actions())
 
     def execute(self, command: Command) -> str:
         try:
@@ -41,6 +50,24 @@ class ExecutionEngine:
 
     def _handle_open_excel(self, command: Command) -> str:
         return self.excel.open_excel()
+
+    def _handle_run_workflow(self, command: Command) -> str:
+        workflow_name = command.arguments["workflow_name"]
+        workflow = self.workflow_registry.get(workflow_name)
+        if workflow is None:
+            raise ValueError(f"Unknown workflow requested: {workflow_name}")
+
+        last_result = ""
+        for index, step in enumerate(workflow.steps, start=1):
+            step_command = Command(
+                name=f"{workflow.name}_step_{index}",
+                action=step.action,
+                arguments=step.arguments,
+                source_text=command.source_text,
+            )
+            last_result = self.handlers[step.action](step_command)
+
+        return f"Workflow '{workflow.name}' completed. Final result: {last_result}"
 
     def _handle_open_app(self, command: Command) -> str:
         return self.desktop.open_app(command.arguments["app_alias"])
@@ -81,3 +108,6 @@ class ExecutionEngine:
 
     def _handle_next_row_from_start(self, command: Command) -> str:
         return self.excel.next_row_from_start()
+
+    def _workflow_allowed_actions(self) -> set[str]:
+        return {action for action in self.handlers if action != "run_workflow"}

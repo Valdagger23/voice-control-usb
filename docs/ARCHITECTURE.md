@@ -23,7 +23,7 @@ Phase 1 is deterministic by design.
 - `voice_control_usb.assistant`
   Assistant orchestration and CLI entrypoint for USB-hosted runtime.
 - `voice_control_usb.core`
-  Shared command models, parser, registry, and proposal persistence.
+  Shared command models, command registry, workflow registry, parser, and proposal persistence.
 - `voice_control_usb.executor`
   Deterministic routing from parsed commands to approved handlers.
 - `voice_control_usb.desktop`
@@ -38,7 +38,7 @@ Phase 1 is deterministic by design.
 2. The starter launches the USB-hosted assistant entrypoint.
 3. Speech input is expected to become plain text before parsing.
 4. The parser converts text into a normalized command or an unsupported proposal.
-5. The executor runs only recognized commands through approved modules, including explicit Excel context and allowlisted desktop actions.
+5. The executor runs only recognized commands through approved modules, including explicit Excel context, allowlisted desktop actions, and registry-driven workflows.
 6. Unsupported input is appended to a proposal log for later review.
 
 ## Deployment model

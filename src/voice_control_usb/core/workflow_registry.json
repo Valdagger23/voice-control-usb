@@ -1,0 +1,52 @@
+{
+  "workflows": [
+    {
+      "name": "mark_pass_and_next_row",
+      "description": "Type pass in the current cell and move to the next row start.",
+      "steps": [
+        {
+          "action": "type_text",
+          "arguments": {
+            "value": "pass"
+          }
+        },
+        {
+          "action": "next_row_from_start",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "name": "mark_fail_and_next_row",
+      "description": "Type fail in the current cell and move to the next row start.",
+      "steps": [
+        {
+          "action": "type_text",
+          "arguments": {
+            "value": "fail"
+          }
+        },
+        {
+          "action": "next_row_from_start",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "name": "open_excel_and_go_to_a1",
+      "description": "Open Excel and move to cell A1.",
+      "steps": [
+        {
+          "action": "open_excel",
+          "arguments": {}
+        },
+        {
+          "action": "go_to_cell",
+          "arguments": {
+            "cell": "A1"
+          }
+        }
+      ]
+    }
+  ]
+}

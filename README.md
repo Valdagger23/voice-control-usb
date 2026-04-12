@@ -36,9 +36,16 @@ Build the deterministic core:
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
 - Push-to-talk speech mode: `--session --input-mode speech --speech-activation ptt` uses Enter as the recording trigger in terminal sessions
 
+## Workflows
+- Approved multi-step macros are registry-driven
+- Workflow phrases expand into existing deterministic actions only
+- Details: [docs/WORKFLOWS.md](docs/WORKFLOWS.md)
+
 ## Local verification
 - `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
+- `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel and go to A1"`
+- `printf 'go to A5\nmark fail and next row\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "go to A123"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open app notepad"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open url https://example.com"`

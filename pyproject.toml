@@ -20,7 +20,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"voice_control_usb.core" = ["command_registry.json"]
+"voice_control_usb.core" = ["command_registry.json", "workflow_registry.json"]
 "voice_control_usb.desktop" = ["app_aliases.json"]
 
 [tool.pytest.ini_options]

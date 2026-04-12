@@ -7,6 +7,33 @@
       "pattern": "^open excel$"
     },
     {
+      "name": "workflow_mark_pass_and_next_row",
+      "action": "run_workflow",
+      "description": "Run the approved workflow that marks pass and moves to the next row.",
+      "pattern": "^mark pass and next row$",
+      "fixed_arguments": {
+        "workflow_name": "mark_pass_and_next_row"
+      }
+    },
+    {
+      "name": "workflow_mark_fail_and_next_row",
+      "action": "run_workflow",
+      "description": "Run the approved workflow that marks fail and moves to the next row.",
+      "pattern": "^mark fail and next row$",
+      "fixed_arguments": {
+        "workflow_name": "mark_fail_and_next_row"
+      }
+    },
+    {
+      "name": "workflow_open_excel_and_go_to_a1",
+      "action": "run_workflow",
+      "description": "Run the approved workflow that opens Excel and goes to A1.",
+      "pattern": "^open excel and go to a1$",
+      "fixed_arguments": {
+        "workflow_name": "open_excel_and_go_to_a1"
+      }
+    },
+    {
       "name": "open_app",
       "action": "open_app",
       "description": "Open an allowlisted desktop application by alias.",

@@ -15,6 +15,17 @@
 ### `open excel`
 Opens or attaches to an Excel session.
 
+## Approved workflows
+
+### `mark pass and next row`
+Runs an approved deterministic workflow that types `pass` and moves to the next anchored row.
+
+### `mark fail and next row`
+Runs an approved deterministic workflow that types `fail` and moves to the next anchored row.
+
+### `open excel and go to A1`
+Runs an approved deterministic workflow that opens Excel and moves to `A1`.
+
 ### `open app <ALIAS>`
 Opens an allowlisted desktop app alias through the desktop adapter.
 
@@ -80,6 +91,9 @@ Moves to the next row and returns to the original start column established by `g
 
 Examples:
 - `open excel`
+- `open excel and go to A1`
+- `mark pass and next row`
+- `mark fail and next row`
 - `open app notepad`
 - `open url https://example.com`
 - `open folder C:\Users`

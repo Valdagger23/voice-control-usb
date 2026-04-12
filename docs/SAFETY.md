@@ -16,6 +16,8 @@
 - Reject ambiguous or unsupported inputs.
 - Log unsupported requests as proposals for review instead of mutating the system automatically.
 - Explicitly reject risky desktop commands such as shutdown, restart, kill process, or arbitrary command execution.
+- Allow workflows to reuse only existing approved actions from the deterministic engine.
+- Do not allow nested workflows or arbitrary execution hooks in workflow definitions.
 
 ## Excel safety
 - Prefer object-level Excel APIs.

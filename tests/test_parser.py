@@ -18,6 +18,22 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(result.command.name, "open_excel")
         self.assertEqual(result.command.action, "open_excel")
 
+    def test_parse_workflow_commands(self) -> None:
+        cases = (
+            ("mark pass and next row", "mark_pass_and_next_row"),
+            ("mark fail and next row", "mark_fail_and_next_row"),
+            ("open excel and go to a1", "open_excel_and_go_to_a1"),
+        )
+
+        for raw_text, expected_workflow in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, "run_workflow")
+                self.assertEqual(result.command.arguments["workflow_name"], expected_workflow)
+
     def test_parse_workbook_context_commands(self) -> None:
         cases = (
             (

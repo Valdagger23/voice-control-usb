@@ -3,6 +3,7 @@
 import unittest
 
 from voice_control_usb.core.models import Command
+from voice_control_usb.core.workflows import WorkflowRegistry
 from voice_control_usb.desktop.adapter import StubDesktopAdapter
 from voice_control_usb.desktop.registry import AppAliasRegistry
 from voice_control_usb.excel.adapter import StubExcelAdapter
@@ -249,6 +250,79 @@ class ExecutionEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(result, "Desktop action is not approved in MVP: shutdown")
+
+    def test_executor_runs_workflow_in_order_against_excel_context(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
+        engine.execute(
+            Command(
+                name="go_to_cell",
+                action="go_to_cell",
+                arguments={"cell": "A10"},
+                source_text="go to A10",
+            )
+        )
+
+        result = engine.execute(
+            Command(
+                name="workflow_mark_pass_and_next_row",
+                action="run_workflow",
+                arguments={"workflow_name": "mark_pass_and_next_row"},
+                source_text="mark pass and next row",
+            )
+        )
+
+        self.assertEqual(
+            result,
+            "Workflow 'mark_pass_and_next_row' completed. Final result: Moved to next row start at A11",
+        )
+        self.assertEqual(excel.cells["A10"], "pass")
+        self.assertEqual(excel.current_cell, "A11")
+
+    def test_executor_runs_open_excel_and_go_to_a1_workflow(self) -> None:
+        engine = self.make_engine()
+
+        result = engine.execute(
+            Command(
+                name="workflow_open_excel_and_go_to_a1",
+                action="run_workflow",
+                arguments={"workflow_name": "open_excel_and_go_to_a1"},
+                source_text="open excel and go to a1",
+            )
+        )
+
+        self.assertEqual(
+            result,
+            "Workflow 'open_excel_and_go_to_a1' completed. Final result: Moved to A1",
+        )
+
+    def test_invalid_workflow_definition_is_rejected(self) -> None:
+        registry = WorkflowRegistry.from_data(
+            {
+                "workflows": [
+                    {
+                        "name": "bad_workflow",
+                        "description": "Invalid workflow",
+                        "steps": [
+                            {
+                                "action": "run_workflow",
+                                "arguments": {"workflow_name": "nested"},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "may not reference nested workflows"):
+            ExecutionEngine(
+                excel=StubExcelAdapter(),
+                desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+                workflow_registry=registry,
+            )
 
 
 if __name__ == "__main__":
