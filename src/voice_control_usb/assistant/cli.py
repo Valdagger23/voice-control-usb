@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.assistant.session import run_session
 from voice_control_usb.excel.factory import create_excel_adapter
 
 
@@ -23,13 +24,27 @@ def main(argv: list[str] | None = None) -> int:
         choices=("stub", "com"),
         help="Select the Excel adapter implementation.",
     )
-    parser.add_argument("command", nargs="+", help="Deterministic command text to run.")
+    parser.add_argument(
+        "--session",
+        action="store_true",
+        help="Run a long-lived session and read one command per line from stdin.",
+    )
+    parser.add_argument(
+        "command",
+        nargs="*",
+        help="Deterministic command text to run in one-shot mode.",
+    )
 
     if not raw_args:
-        print('Usage: python -m voice_control_usb [--excel-adapter stub|com] "open excel"')
+        print(
+            'Usage: python -m voice_control_usb [--excel-adapter stub|com] [--session] "open excel"'
+        )
         return 1
 
     namespace = parser.parse_args(raw_args)
+    if not namespace.session and not namespace.command:
+        parser.error("one-shot mode requires a command, or use --session")
+
     try:
         excel = create_excel_adapter(namespace.excel_adapter)
     except (ImportError, RuntimeError, ValueError) as error:
@@ -40,5 +55,9 @@ def main(argv: list[str] | None = None) -> int:
         proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
         excel=excel,
     )
+    if namespace.session:
+        run_session(app, sys.stdin, sys.stdout)
+        return 0
+
     print(app.handle_text(" ".join(namespace.command)))
     return 0

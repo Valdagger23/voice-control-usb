@@ -6,6 +6,7 @@
 - Ambiguous natural language should be rejected and logged as a proposal.
 - Excel-oriented actions should target object-level operations first.
 - Workbook and worksheet context are maintained within the active assistant process.
+- Session mode preserves that context across multiple commands in one runtime.
 
 ## Supported phase-1 commands
 

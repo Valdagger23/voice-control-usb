@@ -24,15 +24,19 @@ Build the deterministic core:
 - Env override: `VOICE_CONTROL_USB_EXCEL_ADAPTER=stub|com`
 - Details: [docs/EXCEL_ADAPTERS.md](docs/EXCEL_ADAPTERS.md)
 
+## Runtime modes
+- One-shot mode: runs one command and exits
+- Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
+
 ## Local verification
 - `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "go to A123"`
-- Context workflow verification should run inside one assistant process because the CLI handles one command per invocation.
+- `printf 'open workbook /tmp/context.xlsx\nselect sheet Sheet2\ngo to A123\ntype pass\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 
 ## Windows COM verification
 - `python -m pip install pywin32`
 - `set PYTHONPATH=src`
 - `python -m voice_control_usb --excel-adapter com "open excel"`
 - `python -m voice_control_usb --excel-adapter com "go to A123"`
-- Context workflow verification should run inside one assistant process because the CLI handles one command per invocation.
+- Session mode is available with `python -m voice_control_usb --excel-adapter com --session`

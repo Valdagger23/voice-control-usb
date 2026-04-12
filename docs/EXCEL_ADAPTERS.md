@@ -11,11 +11,14 @@ Two implementations now exist:
 
 ## Adapter selection
 The CLI defaults to the stub adapter.
-Each CLI invocation runs a single command, so workbook and worksheet context persists only inside one assistant process.
+One-shot CLI invocations run a single command and exit.
+Session mode keeps one assistant process alive, so workbook and worksheet context persists across commands in that session.
 
 Examples:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
+- `printf 'open excel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `python -m voice_control_usb --excel-adapter com "open excel"`
+- `python -m voice_control_usb --excel-adapter com --session`
 
 You can also select the adapter through:
 - `VOICE_CONTROL_USB_EXCEL_ADAPTER=stub`
@@ -44,29 +47,7 @@ Run these from the repository root:
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-PYTHONPATH=src .venv/bin/python - <<'PY'
-from pathlib import Path
-from voice_control_usb.assistant.app import AssistantApp
-from voice_control_usb.excel.adapter import StubExcelAdapter
-
-app = AssistantApp(
-    proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
-    excel=StubExcelAdapter(),
-)
-
-for command in [
-    "open workbook /tmp/context.xlsx",
-    "select sheet Sheet2",
-    "report current sheet",
-    "go to A123",
-    "type pass",
-    "go right",
-    "type fail",
-    "save workbook",
-    "next row from start",
-]:
-    print(f"{command} -> {app.handle_text(command)}")
-PY
+printf 'open workbook /tmp/context.xlsx\nselect sheet Sheet2\nreport current sheet\ngo to A123\ntype pass\ngo right\ntype fail\nsave workbook\nnext row from start\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session
 ```
 
 Expected behavior:
@@ -112,30 +93,19 @@ Use a single Python process for context-sensitive workflows:
 ```powershell
 python -m pip install pywin32
 $env:PYTHONPATH = "src"
-@'
-from pathlib import Path
-from voice_control_usb.assistant.app import AssistantApp
-from voice_control_usb.excel.factory import create_excel_adapter
-
-app = AssistantApp(
-    proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
-    excel=create_excel_adapter("com"),
-)
-
-for command in [
-    "open excel",
-    r"open workbook C:\path\to\context.xlsx",
-    "select sheet Sheet2",
-    "report current sheet",
-    "go to A123",
-    "type pass",
-    "go right",
-    "type fail",
-    "save workbook",
-    "next row from start",
-]:
-    print(f"{command} -> {app.handle_text(command)}")
-'@ | python -
+@"
+open excel
+open workbook C:\path\to\context.xlsx
+select sheet Sheet2
+report current sheet
+go to A123
+type pass
+go right
+type fail
+save workbook
+next row from start
+quit
+"@ | python -m voice_control_usb --excel-adapter com --session
 ```
 
 Expected behavior:
