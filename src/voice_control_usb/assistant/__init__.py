@@ -1,0 +1,1 @@
+"""USB-hosted assistant package."""

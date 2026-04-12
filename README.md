@@ -4,10 +4,12 @@ Windows-first, USB-portable voice automation system with deterministic Excel con
 
 ## Phase 1 goal
 Build the deterministic core:
-- parser
+- trusted local starter skeleton
+- USB-hosted assistant shell
+- strict parser
 - executor
-- Excel controller
-- command registry
+- Excel adapter boundary
+- unsupported-command proposal logging
 - tests
 
 ## Development environment
@@ -15,3 +17,7 @@ Build the deterministic core:
 - Python virtual environment
 - VS Code
 - Codex
+
+## Local verification
+- `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
+- `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`

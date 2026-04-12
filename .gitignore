@@ -1,7 +1,8 @@
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .venv/
-.env
+env/
+runtime/
 .DS_Store
 Thumbs.db
-.venv/
