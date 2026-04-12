@@ -7,6 +7,30 @@
       "pattern": "^open excel$"
     },
     {
+      "name": "open_workbook",
+      "action": "open_workbook",
+      "description": "Open a workbook from a specific path.",
+      "pattern": "^open workbook (?P<path>.+)$"
+    },
+    {
+      "name": "select_sheet",
+      "action": "select_sheet",
+      "description": "Select a worksheet in the active workbook.",
+      "pattern": "^select sheet (?P<sheet_name>.+)$"
+    },
+    {
+      "name": "save_workbook",
+      "action": "save_workbook",
+      "description": "Save the active workbook.",
+      "pattern": "^save workbook$"
+    },
+    {
+      "name": "report_current_sheet",
+      "action": "report_current_sheet",
+      "description": "Report the current active worksheet.",
+      "pattern": "^report current sheet$"
+    },
+    {
       "name": "go_to_cell",
       "action": "go_to_cell",
       "description": "Move the active Excel selection to a specific cell.",

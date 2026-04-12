@@ -59,6 +59,8 @@ class CommandParser:
             value = transformed.get(argument)
             if value is None:
                 continue
+            if transform == "strip":
+                transformed[argument] = value.strip()
             if transform == "upper":
                 transformed[argument] = value.upper()
         return transformed

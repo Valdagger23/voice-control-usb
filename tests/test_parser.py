@@ -18,6 +18,44 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(result.command.name, "open_excel")
         self.assertEqual(result.command.action, "open_excel")
 
+    def test_parse_workbook_context_commands(self) -> None:
+        cases = (
+            (
+                "open workbook C:\\Data\\audit.xlsx",
+                "open_workbook",
+                "open_workbook",
+                {"path": "C:\\Data\\audit.xlsx"},
+            ),
+            (
+                "select sheet Summary",
+                "select_sheet",
+                "select_sheet",
+                {"sheet_name": "Summary"},
+            ),
+            (
+                "save workbook",
+                "save_workbook",
+                "save_workbook",
+                {},
+            ),
+            (
+                "report current sheet",
+                "report_current_sheet",
+                "report_current_sheet",
+                {},
+            ),
+        )
+
+        for raw_text, expected_name, expected_action, expected_arguments in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.name, expected_name)
+                self.assertEqual(result.command.action, expected_action)
+                self.assertEqual(result.command.arguments, expected_arguments)
+
     def test_parse_go_to_cell_normalizes_reference(self) -> None:
         result = self.parser.parse("go to a123")
 

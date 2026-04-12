@@ -5,14 +5,36 @@
 - Each command must map to one approved handler.
 - Ambiguous natural language should be rejected and logged as a proposal.
 - Excel-oriented actions should target object-level operations first.
+- Workbook and worksheet context are maintained within the active assistant process.
 
 ## Supported phase-1 commands
 
 ### `open excel`
 Opens or attaches to an Excel session.
 
+### `open workbook <PATH>`
+Opens a workbook and makes it the active workbook context for later sheet selection, saving, and navigation commands.
+
+Examples:
+- `open workbook C:\Data\audit.xlsx`
+- `open workbook /tmp/context.xlsx`
+
+### `select sheet <NAME>`
+Selects a worksheet inside the active workbook context.
+
+Examples:
+- `select sheet Sheet2`
+- `select sheet Summary`
+
+### `save workbook`
+Saves the active workbook.
+If the workbook has no path yet, the adapter rejects the command instead of guessing a save destination.
+
+### `report current sheet`
+Reports the current active worksheet together with the active workbook name.
+
 ### `go to <CELL>`
-Moves the active Excel location to a specific cell and sets the start column for the current row-entry block.
+Moves the active Excel location to a specific cell in the active worksheet and sets the start column for the current row-entry block.
 
 Examples:
 - `go to A123`
@@ -35,10 +57,14 @@ Moves to the next row and returns to the original start column established by `g
 
 Examples:
 - `open excel`
+- `open workbook C:\Data\audit.xlsx`
+- `select sheet Sheet2`
+- `report current sheet`
 - `go to A123`
 - `type pass`
 - `go right`
 - `type fail`
+- `save workbook`
 - `next row from start`
 
 ## Unsupported command handling
@@ -50,8 +76,8 @@ It should create a proposal entry containing:
 - timestamp or surrounding runtime metadata in later phases
 
 ## Near-term planned commands
-- open workbook
-- save workbook
-- select worksheet
+- save workbook as
+- create worksheet
+- rename worksheet
 - go left
 - repeat current row pattern

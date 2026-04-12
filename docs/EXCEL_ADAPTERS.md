@@ -11,6 +11,7 @@ Two implementations now exist:
 
 ## Adapter selection
 The CLI defaults to the stub adapter.
+Each CLI invocation runs a single command, so workbook and worksheet context persists only inside one assistant process.
 
 Examples:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
@@ -22,9 +23,13 @@ You can also select the adapter through:
 
 ## WSL behavior
 WSL development and tests continue to use the stub adapter.
-The stub preserves deterministic movement semantics for:
+The stub preserves deterministic workbook, sheet, and movement semantics for:
 
 - `open excel`
+- `open workbook <PATH>`
+- `select sheet <NAME>`
+- `save workbook`
+- `report current sheet`
 - `go to A123`
 - `type pass`
 - `type fail`
@@ -34,12 +39,53 @@ The stub preserves deterministic movement semantics for:
 
 No live Excel process is controlled in WSL.
 
+## Manual WSL verification
+Run these from the repository root:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+PYTHONPATH=src .venv/bin/python - <<'PY'
+from pathlib import Path
+from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.excel.adapter import StubExcelAdapter
+
+app = AssistantApp(
+    proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
+    excel=StubExcelAdapter(),
+)
+
+for command in [
+    "open workbook /tmp/context.xlsx",
+    "select sheet Sheet2",
+    "report current sheet",
+    "go to A123",
+    "type pass",
+    "go right",
+    "type fail",
+    "save workbook",
+    "next row from start",
+]:
+    print(f"{command} -> {app.handle_text(command)}")
+PY
+```
+
+Expected behavior:
+- The stub opens `context.xlsx` as the active workbook context.
+- `Sheet2` becomes the active sheet.
+- `report current sheet` reports `Sheet2` and `context.xlsx`.
+- `pass` and `fail` are written into stub-managed cell storage.
+- `save workbook` succeeds because the workbook was opened with a path.
+
 ## Windows COM behavior
 The COM adapter uses `win32com.client.Dispatch("Excel.Application")` and works through object-level Excel control.
 It does not use keyboard or mouse automation as the primary control path.
 
 Implemented commands:
 - `open excel`
+- `open workbook <PATH>`
+- `select sheet <NAME>`
+- `save workbook`
+- `report current sheet`
 - `go to A123`
 - `type pass`
 - `type fail`
@@ -48,6 +94,7 @@ Implemented commands:
 - `next row from start`
 
 `next row from start` preserves the same anchor semantics as the stub adapter by remembering the column established by `go to <CELL>`.
+Workbook and worksheet context are explicit, so commands like `select sheet <NAME>` and `report current sheet` operate against the active workbook instead of assuming only a single active selection.
 
 ## Windows setup
 Install the Windows dependency in a Windows Python environment:
@@ -59,23 +106,46 @@ Or:
 - `pip install .[windows]`
 
 ## Manual Windows verification
-Run these in a Windows shell from the repository root:
+Run these in a Windows shell from the repository root.
+Use a single Python process for context-sensitive workflows:
 
 ```powershell
 python -m pip install pywin32
 $env:PYTHONPATH = "src"
-python -m voice_control_usb --excel-adapter com "open excel"
-python -m voice_control_usb --excel-adapter com "go to A123"
-python -m voice_control_usb --excel-adapter com "type pass"
-python -m voice_control_usb --excel-adapter com "go right"
-python -m voice_control_usb --excel-adapter com "type fail"
-python -m voice_control_usb --excel-adapter com "next row from start"
+@'
+from pathlib import Path
+from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.excel.factory import create_excel_adapter
+
+app = AssistantApp(
+    proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
+    excel=create_excel_adapter("com"),
+)
+
+for command in [
+    "open excel",
+    r"open workbook C:\path\to\context.xlsx",
+    "select sheet Sheet2",
+    "report current sheet",
+    "go to A123",
+    "type pass",
+    "go right",
+    "type fail",
+    "save workbook",
+    "next row from start",
+]:
+    print(f"{command} -> {app.handle_text(command)}")
+'@ | python -
 ```
 
 Expected behavior:
 - Excel opens visibly.
+- The requested workbook becomes active.
+- `Sheet2` becomes the active sheet.
+- `report current sheet` reports the active workbook and sheet.
 - Selection moves to `A123`.
 - `pass` is written to `A123`.
 - Selection moves to `B123`.
 - `fail` is written to `B123`.
+- `save workbook` saves the active workbook through COM.
 - `next row from start` moves selection to `A124`.

@@ -47,6 +47,22 @@ class AssistantAppTests(unittest.TestCase):
             self.assertEqual(result, "Typed 'pass' into C7")
             self.assertEqual(excel.cells["C7"], "pass")
 
+    def test_app_handles_workbook_context_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            excel = StubExcelAdapter()
+            app = AssistantApp(proposal_path=proposal_path, excel=excel)
+
+            open_result = app.handle_text("open workbook /tmp/context.xlsx")
+            select_result = app.handle_text("select sheet Sheet2")
+            report_result = app.handle_text("report current sheet")
+            save_result = app.handle_text("save workbook")
+
+            self.assertEqual(open_result, "Opened workbook: context.xlsx")
+            self.assertEqual(select_result, "Selected sheet: Sheet2")
+            self.assertEqual(report_result, "Current sheet: Sheet2 (workbook: context.xlsx)")
+            self.assertEqual(save_result, "Saved workbook: context.xlsx")
+
 
 if __name__ == "__main__":
     unittest.main()

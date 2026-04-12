@@ -15,6 +15,10 @@ class ExecutionEngine:
         self.excel = excel
         self.handlers: dict[str, Callable[[Command], str]] = {
             "open_excel": self._handle_open_excel,
+            "open_workbook": self._handle_open_workbook,
+            "select_sheet": self._handle_select_sheet,
+            "save_workbook": self._handle_save_workbook,
+            "report_current_sheet": self._handle_report_current_sheet,
             "go_to_cell": self._handle_go_to_cell,
             "type_text": self._handle_type_text,
             "go_right": self._handle_go_right,
@@ -31,6 +35,18 @@ class ExecutionEngine:
 
     def _handle_open_excel(self, command: Command) -> str:
         return self.excel.open_excel()
+
+    def _handle_open_workbook(self, command: Command) -> str:
+        return self.excel.open_workbook(command.arguments["path"])
+
+    def _handle_select_sheet(self, command: Command) -> str:
+        return self.excel.select_sheet(command.arguments["sheet_name"])
+
+    def _handle_save_workbook(self, command: Command) -> str:
+        return self.excel.save_workbook()
+
+    def _handle_report_current_sheet(self, command: Command) -> str:
+        return self.excel.report_current_sheet()
 
     def _handle_go_to_cell(self, command: Command) -> str:
         return self.excel.go_to_cell(command.arguments["cell"])

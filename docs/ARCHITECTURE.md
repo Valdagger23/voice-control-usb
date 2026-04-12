@@ -36,7 +36,7 @@ Phase 1 is deterministic by design.
 2. The starter launches the USB-hosted assistant entrypoint.
 3. Speech input is expected to become plain text before parsing.
 4. The parser converts text into a normalized command or an unsupported proposal.
-5. The executor runs only recognized commands through approved modules.
+5. The executor runs only recognized commands through approved modules and explicit Excel workbook/sheet context.
 6. Unsupported input is appended to a proposal log for later review.
 
 ## Deployment model
@@ -50,3 +50,4 @@ Phase 1 is deterministic by design.
 - Deferred path: keyboard or mouse fallback only if an operation cannot be achieved safely through object control.
 - The stub adapter remains the default path for WSL development and automated tests.
 - The Windows COM adapter now implements the current deterministic command slice behind the same interface.
+- The adapter boundary now exposes workbook and worksheet context so future Excel commands can target explicit state instead of relying only on the active selection.

@@ -8,6 +8,52 @@ from voice_control_usb.executor.engine import ExecutionEngine
 
 
 class ExecutionEngineTests(unittest.TestCase):
+    def test_executor_routes_workbook_and_sheet_context_commands(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(excel=excel)
+
+        outputs = [
+            engine.execute(
+                Command(
+                    name="open_workbook",
+                    action="open_workbook",
+                    arguments={"path": "/tmp/audit.xlsx"},
+                    source_text="open workbook /tmp/audit.xlsx",
+                )
+            ),
+            engine.execute(
+                Command(
+                    name="select_sheet",
+                    action="select_sheet",
+                    arguments={"sheet_name": "Sheet2"},
+                    source_text="select sheet Sheet2",
+                )
+            ),
+            engine.execute(
+                Command(
+                    name="report_current_sheet",
+                    action="report_current_sheet",
+                    arguments={},
+                    source_text="report current sheet",
+                )
+            ),
+            engine.execute(
+                Command(
+                    name="save_workbook",
+                    action="save_workbook",
+                    arguments={},
+                    source_text="save workbook",
+                )
+            ),
+        ]
+
+        self.assertEqual(outputs[0], "Opened workbook: audit.xlsx")
+        self.assertEqual(outputs[1], "Selected sheet: Sheet2")
+        self.assertEqual(outputs[2], "Current sheet: Sheet2 (workbook: audit.xlsx)")
+        self.assertEqual(outputs[3], "Saved workbook: audit.xlsx")
+        self.assertEqual(excel.current_context().sheet_name, "Sheet2")
+        self.assertEqual(excel.current_context().workbook_name, "audit.xlsx")
+
     def test_executor_routes_navigation_and_data_entry_workflow(self) -> None:
         engine = ExecutionEngine(excel=StubExcelAdapter())
         commands = [
@@ -82,6 +128,62 @@ class ExecutionEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(result, "Moved down to C8")
+
+    def test_sheet_selection_preserves_per_sheet_navigation_context(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(excel=excel)
+
+        engine.execute(
+            Command(
+                name="open_workbook",
+                action="open_workbook",
+                arguments={"path": "/tmp/context.xlsx"},
+                source_text="open workbook /tmp/context.xlsx",
+            )
+        )
+        engine.execute(
+            Command(
+                name="go_to_cell",
+                action="go_to_cell",
+                arguments={"cell": "B2"},
+                source_text="go to B2",
+            )
+        )
+        engine.execute(
+            Command(
+                name="select_sheet",
+                action="select_sheet",
+                arguments={"sheet_name": "Sheet2"},
+                source_text="select sheet Sheet2",
+            )
+        )
+        engine.execute(
+            Command(
+                name="go_to_cell",
+                action="go_to_cell",
+                arguments={"cell": "D5"},
+                source_text="go to D5",
+            )
+        )
+        engine.execute(
+            Command(
+                name="select_sheet",
+                action="select_sheet",
+                arguments={"sheet_name": "Sheet1"},
+                source_text="select sheet Sheet1",
+            )
+        )
+
+        result = engine.execute(
+            Command(
+                name="next_row_from_start",
+                action="next_row_from_start",
+                arguments={},
+                source_text="next row from start",
+            )
+        )
+
+        self.assertEqual(result, "Moved to next row start at B3")
 
 
 if __name__ == "__main__":

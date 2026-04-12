@@ -9,6 +9,7 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 - Strict parser for a very small approved command set.
 - Deterministic execution engine.
 - Excel adapter interface with a safe stub implementation for WSL and a Windows COM-backed implementation for object-level Excel control.
+- Workbook and worksheet context handling behind the Excel adapter boundary.
 - Unsupported-command proposal logging.
 - Parser and execution tests.
 
@@ -21,6 +22,10 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 
 ## Initial command scope
 - `open excel`
+- `open workbook <PATH>`
+- `select sheet <NAME>`
+- `save workbook`
+- `report current sheet`
 - `go to <CELL>`
 - `type pass`
 - `type fail`
@@ -29,8 +34,7 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 - `next row from start`
 
 ## Ordered next implementation steps
-1. Add workbook, worksheet, and active-context models so commands can target explicit Excel state.
-2. Expand the parser with a reviewed command grammar for workbook open/save/select actions.
-3. Add starter configuration loading and USB metadata validation beyond a single trust marker.
-4. Introduce a speech-to-text adapter that outputs plain text into the same deterministic parser path.
-5. Add structured proposal review tooling so unsupported commands can become reviewed grammar additions.
+1. Expand the parser with a reviewed command grammar for workbook save-as and worksheet creation or rename actions.
+2. Add starter configuration loading and USB metadata validation beyond a single trust marker.
+3. Introduce a speech-to-text adapter that outputs plain text into the same deterministic parser path.
+4. Add structured proposal review tooling so unsupported commands can become reviewed grammar additions.

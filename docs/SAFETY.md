@@ -22,6 +22,7 @@
 - Keep workbook mutation commands narrow and explicit.
 - Use the stub adapter by default in WSL so automated tests do not depend on a live Excel process.
 - Require explicit adapter selection before using the Windows COM path.
+- Keep workbook and sheet targeting explicit so save and sheet-selection commands operate on a known active context.
 
 ## AI safety for early phases
 - AI may help draft reviewed proposals later, but phase 1 does not allow live self-modifying code.
