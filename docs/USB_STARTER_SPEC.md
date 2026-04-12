@@ -62,16 +62,20 @@ When one trusted USB is detected, the starter builds a direct executable launch:
 
 - command: `<USB_ROOT>\<assistant_relative_executable>`
 - working directory: `<usb_root>/<assistant_workdir>`
+- assistant args:
+  - `--usb-root <USB_ROOT>`
+  - `--runtime-dir <USB_ROOT>\runtime`
 
 The launch path uses `subprocess.Popen(..., shell=False)` only.
 No arbitrary shell command execution is used.
 
 ## Duplicate-launch prevention
-The starter tracks the launched assistant process in memory.
+The starter tracks the launched assistant process in memory, and the assistant also guards its own runtime directory with a lock file.
 
 - if the assistant is still running, the starter does not launch another copy
 - if the tracked process has exited, the starter allows a fresh launch
 - if more than one trusted USB is visible at once, launch is skipped to avoid ambiguity
+- if the starter is restarted while the assistant is still active, the assistant lock file still blocks a duplicate packaged instance
 
 ## Watcher behavior
 The starter can run:
@@ -105,6 +109,8 @@ WSL tests cover:
 - duplicate-launch prevention
 - relaunch after process exit
 - packaged assistant path resolution
+- assistant runtime-argument generation
+- invalid USB layout rejection
 
 WSL does not verify live removable-drive discovery on Windows.
 That part still requires native Windows testing.

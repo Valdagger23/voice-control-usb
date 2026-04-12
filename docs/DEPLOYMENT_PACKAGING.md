@@ -51,6 +51,10 @@ The script:
 - installs `pyinstaller`
 - builds `voice-control-usb-assistant.exe`
 - builds `voice-control-usb-starter.exe`
+- bundles the deterministic runtime data files into the assistant executable:
+  - `command_registry.json`
+  - `workflow_registry.json`
+  - `app_aliases.json`
 - copies the outputs into:
   - `dist\windows\assistant\voice-control-usb-assistant.exe`
   - `dist\windows\starter\voice-control-usb-starter.exe`
@@ -108,9 +112,20 @@ On each scan:
 2. find drives whose volume label matches `expected_volume_label`
 3. require the marker file in the USB root
 4. resolve `<USB_ROOT>/<assistant_relative_executable>`
-5. launch that executable with `shell=False`
+5. set the packaged assistant working directory from `assistant_workdir`
+6. launch that executable with `shell=False`
+7. pass `--usb-root <USB_ROOT>` and `--runtime-dir <USB_ROOT>\runtime`
 
 If the packaged assistant file is missing, launch is skipped and the reason is logged.
+
+## Packaged runtime assumptions
+The packaged assistant uses explicit runtime inputs instead of relying on the current shell state:
+
+- `--usb-root` identifies the trusted USB root
+- `--runtime-dir` identifies where lock files and runtime output live
+- deterministic JSON data files are bundled into the packaged assistant
+
+The assistant also uses a runtime lock file in `<USB_ROOT>\runtime\assistant.lock` to prevent duplicate packaged instances even if the starter is restarted.
 
 ## Native Windows verification still required
 WSL tests cover launch-spec generation and packaged-path resolution.
@@ -120,3 +135,4 @@ Native Windows verification is still required for:
 - real removable-drive discovery
 - real Task Scheduler startup
 - real packaged assistant launch from USB
+- real packaged assistant resource extraction and lock-file behavior

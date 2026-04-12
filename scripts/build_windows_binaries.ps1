@@ -16,6 +16,9 @@ $starterName = "voice-control-usb-starter"
     --onefile `
     --name $assistantName `
     --paths src `
+    --add-data "src\voice_control_usb\core\command_registry.json;voice_control_usb\core" `
+    --add-data "src\voice_control_usb\core\workflow_registry.json;voice_control_usb\core" `
+    --add-data "src\voice_control_usb\desktop\app_aliases.json;voice_control_usb\desktop" `
     src\voice_control_usb\__main__.py
 
 & $Python -m PyInstaller `

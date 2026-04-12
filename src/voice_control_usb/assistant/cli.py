@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
 import os
-from pathlib import Path
 import sys
 
 from voice_control_usb.assistant.app import AssistantApp
@@ -12,6 +12,11 @@ from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
 from voice_control_usb.desktop.factory import create_desktop_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
+from voice_control_usb.runtime_support import (
+    AssistantInstanceGuard,
+    AssistantRuntimePaths,
+    DuplicateInstanceError,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +60,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Choose the controlled speech activation model.",
     )
     parser.add_argument(
+        "--usb-root",
+        default=os.environ.get("VOICE_CONTROL_USB_USB_ROOT"),
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--runtime-dir",
+        default=os.environ.get("VOICE_CONTROL_USB_RUNTIME_DIR"),
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "command",
         nargs="*",
         help="Deterministic command text to run in one-shot mode.",
@@ -73,30 +88,54 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("speech input mode requires --session")
 
     try:
-        excel = create_excel_adapter(namespace.excel_adapter)
-        desktop = create_desktop_adapter(namespace.desktop_adapter)
-    except (ImportError, RuntimeError, ValueError) as error:
-        print(str(error))
+        runtime_paths = AssistantRuntimePaths.from_cli(
+            usb_root=namespace.usb_root,
+            runtime_dir=namespace.runtime_dir,
+        )
+    except RuntimeError as error:
+        print(f"Assistant startup failed: {error}")
         return 2
 
-    app = AssistantApp(
-        proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
-        excel=excel,
-        desktop=desktop,
-    )
-    if namespace.session:
-        if namespace.input_mode == "speech":
-            try:
-                transcriber = create_speech_transcriber(namespace.speech_provider)
-                activator = create_speech_activator(namespace.speech_activation)
-            except ValueError as error:
-                print(str(error))
-                return 2
-            run_speech_session(app, transcriber, activator, sys.stdin, sys.stdout)
+    instance_guard = AssistantInstanceGuard(runtime_paths.lock_path)
+    try:
+        instance_guard.acquire()
+    except DuplicateInstanceError as error:
+        print(str(error))
+        return 3
+
+    try:
+        excel = create_excel_adapter(namespace.excel_adapter)
+        desktop = create_desktop_adapter(namespace.desktop_adapter)
+    except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
+        instance_guard.release()
+        print(f"Assistant startup failed: {error}")
+        return 2
+
+    try:
+        app = AssistantApp(
+            proposal_path=runtime_paths.proposal_path,
+            excel=excel,
+            desktop=desktop,
+        )
+        if namespace.session:
+            if namespace.input_mode == "speech":
+                try:
+                    transcriber = create_speech_transcriber(namespace.speech_provider)
+                    activator = create_speech_activator(namespace.speech_activation)
+                except ValueError as error:
+                    print(str(error))
+                    return 2
+                run_speech_session(app, transcriber, activator, sys.stdin, sys.stdout)
+                return 0
+
+            run_session(app, sys.stdin, sys.stdout)
             return 0
 
-        run_session(app, sys.stdin, sys.stdout)
+        print(app.handle_text(" ".join(namespace.command)))
         return 0
-
-    print(app.handle_text(" ".join(namespace.command)))
-    return 0
+    except (FileNotFoundError, RuntimeError, ValueError) as error:
+        print(f"Assistant startup failed: {error}")
+        return 2
+    finally:
+        with suppress(Exception):
+            instance_guard.release()

@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from voice_control_usb.assistant import cli
+from voice_control_usb.runtime_support import DuplicateInstanceError
 
 
 class CliTests(unittest.TestCase):
@@ -51,6 +52,19 @@ class CliTests(unittest.TestCase):
                 "Session ended.",
             ],
         )
+
+    def test_cli_reports_duplicate_instance_guard_failure(self) -> None:
+        output_stream = StringIO()
+        with patch("sys.stdout", output_stream), patch(
+            "voice_control_usb.assistant.cli.AssistantInstanceGuard.acquire",
+            side_effect=DuplicateInstanceError(
+                "Assistant already running for runtime directory: /tmp/runtime"
+            ),
+        ):
+            exit_code = cli.main(["open", "excel"])
+
+        self.assertEqual(exit_code, 3)
+        self.assertIn("Assistant already running for runtime directory", output_stream.getvalue())
 
     def test_push_to_talk_session_mode_uses_enter_trigger(self) -> None:
         input_stream = StringIO("\nopen excel\nquit\n")

@@ -37,6 +37,11 @@ class FakeVolumeProvider:
         return list(self.volumes)
 
 
+class FailingLauncher:
+    def launch(self, spec: LaunchSpec) -> FakeProcess:
+        raise OSError("process creation failed")
+
+
 class StarterConfigTests(unittest.TestCase):
     def test_loads_json_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -137,11 +142,23 @@ class TrustedUsbStarterTests(unittest.TestCase):
             self.assertFalse(second.launched)
             self.assertEqual(len(launcher.specs), 1)
             self.assertIn("Assistant already running", second.message)
-            self.assertEqual(launcher.specs[0].command, (str(packaged_exe.resolve()),))
+            self.assertEqual(
+                launcher.specs[0].command,
+                (
+                    str(packaged_exe.resolve()),
+                    "--usb-root",
+                    str(usb_root.resolve()),
+                    "--runtime-dir",
+                    str((usb_root / "runtime").resolve()),
+                ),
+            )
             self.assertEqual(launcher.specs[0].executable_path, packaged_exe.resolve())
             self.assertEqual(launcher.specs[0].usb_root, usb_root.resolve())
             self.assertEqual(launcher.specs[0].cwd, usb_root.resolve())
-            self.assertEqual(launcher.specs[0].env_overrides, {})
+            self.assertEqual(
+                launcher.specs[0].env_overrides,
+                {"VOICE_CONTROL_USB_USB_ROOT": str(usb_root.resolve())},
+            )
 
     def test_finished_process_can_be_relaunched(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -216,6 +233,45 @@ class TrustedUsbStarterTests(unittest.TestCase):
             self.assertFalse(result.launched)
             self.assertIn("Packaged assistant executable not found on trusted USB", result.message)
             self.assertEqual(launcher.specs, [])
+
+    def test_invalid_relative_layout_path_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            usb_root = Path(tmp_dir) / "usb"
+            usb_root.mkdir()
+            (usb_root / "voice-control-usb.trusted").write_text("ok", encoding="utf-8")
+            starter = TrustedUsbStarter(
+                config=self.make_config(assistant_relative_executable="..\\outside.exe"),
+                volume_provider=FakeVolumeProvider(
+                    [UsbVolume(mount_path=usb_root, volume_label="VOICEBOT")]
+                ),
+                launcher=FakeLauncher(),
+            )
+
+            result = starter.scan_and_launch()
+
+            self.assertFalse(result.launched)
+            self.assertIn("Invalid USB layout path escapes trusted USB root", result.message)
+
+    def test_launch_failure_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            usb_root = Path(tmp_dir) / "usb"
+            usb_root.mkdir()
+            (usb_root / "voice-control-usb.trusted").write_text("ok", encoding="utf-8")
+            packaged_dir = usb_root / "dist" / "voice-control-usb-assistant"
+            packaged_dir.mkdir(parents=True)
+            (packaged_dir / "voice-control-usb-assistant.exe").write_text("stub", encoding="utf-8")
+            starter = TrustedUsbStarter(
+                config=self.make_config(),
+                volume_provider=FakeVolumeProvider(
+                    [UsbVolume(mount_path=usb_root, volume_label="VOICEBOT")]
+                ),
+                launcher=FailingLauncher(),
+            )
+
+            result = starter.scan_and_launch()
+
+            self.assertFalse(result.launched)
+            self.assertEqual(result.message, "Assistant launch failed: process creation failed")
 
 
 if __name__ == "__main__":

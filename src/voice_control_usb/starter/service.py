@@ -143,7 +143,25 @@ class TrustedUsbStarter:
                     usb_root=volume.mount_path,
                 )
             )
-        self._running_process = self.launcher.launch(spec)
+        except ValueError as error:
+            return self._record(
+                StarterResult(
+                    launched=False,
+                    message=str(error),
+                    usb_root=volume.mount_path,
+                )
+            )
+
+        try:
+            self._running_process = self.launcher.launch(spec)
+        except OSError as error:
+            return self._record(
+                StarterResult(
+                    launched=False,
+                    message=f"Assistant launch failed: {error}",
+                    usb_root=volume.mount_path,
+                )
+            )
         self._running_usb_root = volume.mount_path
         return self._record(
             StarterResult(
@@ -186,20 +204,47 @@ class TrustedUsbStarter:
         """Resolve the assistant command and environment for a trusted USB."""
 
         usb_root = volume.mount_path.resolve()
-        cwd = (usb_root / self.config.assistant_workdir).resolve()
-        executable_path = (usb_root / self.config.assistant_relative_executable).resolve()
+        cwd = self._resolve_within_usb_root(usb_root, self.config.assistant_workdir)
+        if not cwd.is_dir():
+            raise FileNotFoundError(
+                f"Configured assistant working directory not found on trusted USB: {cwd}"
+            )
+
+        executable_path = self._resolve_within_usb_root(
+            usb_root,
+            self.config.assistant_relative_executable,
+        )
         if not executable_path.is_file():
             raise FileNotFoundError(
                 f"Packaged assistant executable not found on trusted USB: {executable_path}"
             )
+        runtime_dir = (usb_root / "runtime").resolve()
 
         return LaunchSpec(
             usb_root=usb_root,
             cwd=cwd,
             executable_path=executable_path,
-            command=(str(executable_path),),
-            env_overrides={},
+            command=(
+                str(executable_path),
+                "--usb-root",
+                str(usb_root),
+                "--runtime-dir",
+                str(runtime_dir),
+            ),
+            env_overrides={"VOICE_CONTROL_USB_USB_ROOT": str(usb_root)},
         )
+
+    @staticmethod
+    def _resolve_within_usb_root(usb_root: Path, relative_path: str) -> Path:
+        normalized_relative_path = relative_path.replace("\\", "/")
+        candidate = (usb_root / normalized_relative_path).resolve()
+        try:
+            candidate.relative_to(usb_root)
+        except ValueError as error:
+            raise ValueError(
+                f"Invalid USB layout path escapes trusted USB root: {relative_path}"
+            ) from error
+        return candidate
 
     def _clear_finished_process(self) -> None:
         if self._running_process is None:

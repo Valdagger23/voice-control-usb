@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from importlib import resources
 import json
 from pathlib import Path
 from typing import Any
+
+from voice_control_usb.runtime_support import resolve_packaged_data_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +35,7 @@ class WorkflowRegistry:
 
     @classmethod
     def load_default(cls) -> "WorkflowRegistry":
-        with resources.files("voice_control_usb.core").joinpath("workflow_registry.json").open(
-            "r",
-            encoding="utf-8",
-        ) as handle:
-            data = json.load(handle)
-        return cls.from_data(data)
+        return cls.from_path(resolve_packaged_data_path("core", "workflow_registry.json"))
 
     @classmethod
     def from_path(cls, path: Path) -> "WorkflowRegistry":

@@ -22,7 +22,8 @@ Build the deterministic core:
 - Local starter config is JSON-based and separate from the USB-hosted assistant
 - Trust requires both the expected USB volume label and a marker file in the USB root
 - The starter launches a packaged assistant executable from the trusted USB with `shell=False`
-- Duplicate launches are prevented while the tracked assistant process is still running
+- The starter passes `--usb-root` and `--runtime-dir` explicitly to the packaged assistant
+- Duplicate launches are prevented both by the starter’s child-process tracking and the assistant’s runtime lock file
 - Details: [docs/USB_STARTER_SPEC.md](docs/USB_STARTER_SPEC.md)
 - Packaging details: [docs/DEPLOYMENT_PACKAGING.md](docs/DEPLOYMENT_PACKAGING.md)
 
@@ -78,6 +79,7 @@ Build the deterministic core:
 - `.\scripts\build_windows_binaries.ps1`
 - `.\scripts\install_starter_task.ps1 -StarterExe "C:\Program Files\voice-control-usb\voice-control-usb-starter.exe" -ConfigPath "C:\ProgramData\voice-control-usb\starter.json"`
 - `C:\Program Files\voice-control-usb\voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --once`
+- `E:\dist\voice-control-usb-assistant\voice-control-usb-assistant.exe --usb-root E:\ --runtime-dir E:\runtime`
 - Session mode is available with `python -m voice_control_usb --excel-adapter com --session`
 - Speech session mode is available with `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 

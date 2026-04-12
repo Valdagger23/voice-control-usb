@@ -11,7 +11,9 @@
 - Require explicit trusted USB validation before launch.
 - Keep the local starter minimal so the USB payload does not inherit unnecessary host privileges.
 - Trust the USB only when both the configured volume label and marker file match.
-- Launch the USB assistant through a direct Python command, not through arbitrary shell execution.
+- Launch the packaged USB assistant through a direct executable path, not through arbitrary shell execution.
+- Pass the USB root and runtime directory explicitly to the assistant instead of relying on implicit shell state.
+- Keep runtime data lookups explicit so bundled registries and allowlists fail loudly when missing.
 
 ## Command safety
 - Parse only approved command grammar.
