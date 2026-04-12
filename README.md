@@ -47,5 +47,6 @@ Build the deterministic core:
 ## Speech input
 - Controlled activation only for now: manual `record ...` lines in speech session mode
 - Default speech provider: stub/manual for WSL and tests
+- First real provider: `speech_recognition`
 - Future providers plug in through `SpeechTranscriber` and `create_speech_transcriber`
 - Details: [docs/SPEECH_INPUT.md](docs/SPEECH_INPUT.md)

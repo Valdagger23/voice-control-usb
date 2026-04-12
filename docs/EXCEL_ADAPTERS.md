@@ -19,6 +19,7 @@ Examples:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
 - `printf 'open excel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `printf 'record open excel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech`
+- `python -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition`
 - `python -m voice_control_usb --excel-adapter com "open excel"`
 - `python -m voice_control_usb --excel-adapter com --session`
 - `python -m voice_control_usb --excel-adapter com --session --input-mode speech`

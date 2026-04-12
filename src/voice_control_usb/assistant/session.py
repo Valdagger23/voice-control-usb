@@ -87,7 +87,12 @@ def run_speech_session(
             output_stream.flush()
             continue
 
-        recognized = transcriber.transcribe(activation)
+        try:
+            recognized = transcriber.transcribe(activation)
+        except (ImportError, RuntimeError) as error:
+            output_stream.write(f"Speech input unavailable: {error}\n")
+            output_stream.flush()
+            continue
         if not recognized:
             output_stream.write("No speech recognized.\n")
             output_stream.flush()

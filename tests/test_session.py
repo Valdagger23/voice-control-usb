@@ -137,6 +137,33 @@ class AssistantSessionTests(unittest.TestCase):
                 ],
             )
 
+    def test_speech_session_handles_provider_runtime_failure_cleanly(self) -> None:
+        class FailingTranscriber(ManualTextSpeechTranscriber):
+            def transcribe(self, audio_source: str | None = None) -> str:
+                raise RuntimeError("microphone backend missing")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path, excel=StubExcelAdapter())
+            input_stream = StringIO("record\nquit\n")
+            output_stream = StringIO()
+
+            result = run_speech_session(
+                app,
+                FailingTranscriber(),
+                input_stream,
+                output_stream,
+            )
+
+            self.assertEqual(result.processed_commands, 0)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "Speech input unavailable: microphone backend missing",
+                    "Session ended.",
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
