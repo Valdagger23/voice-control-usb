@@ -72,7 +72,10 @@ class AssistantAppTests(unittest.TestCase):
             risky_result = app.handle_text("shutdown")
 
             self.assertEqual(safe_result, "Opened app alias: notepad (stub)")
-            self.assertEqual(risky_result, "Desktop action is not approved in MVP: shutdown")
+            self.assertEqual(
+                risky_result,
+                "Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
+            )
             self.assertFalse(proposal_path.exists())
 
     def test_app_handles_workflow_commands(self) -> None:
@@ -89,6 +92,41 @@ class AssistantAppTests(unittest.TestCase):
                 "Workflow 'mark_fail_and_next_row' completed. Final result: Moved to next row start at A6",
             )
             self.assertEqual(excel.cells["A5"], "fail")
+
+    def test_app_confirms_and_cancels_pending_risky_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path)
+
+            pending = app.handle_text("shutdown")
+            canceled = app.handle_text("cancel")
+            no_pending = app.handle_text("confirm")
+
+            self.assertEqual(
+                pending,
+                "Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
+            )
+            self.assertEqual(canceled, "Canceled pending action: shutdown")
+            self.assertEqual(no_pending, "No pending action to confirm.")
+
+    def test_app_confirms_risky_action_before_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path)
+
+            app.handle_text("restart")
+            confirmed = app.handle_text("confirm")
+
+            self.assertEqual(confirmed, "Confirmed. Restart requested (stub)")
+
+    def test_blocked_actions_remain_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path)
+
+            blocked = app.handle_text("run command dir")
+
+            self.assertEqual(blocked, "Desktop action is blocked in MVP: dir")
 
 
 if __name__ == "__main__":

@@ -237,19 +237,42 @@ class ExecutionEngineTests(unittest.TestCase):
         self.assertEqual(outputs[1], "Opened URL: https://example.com (stub)")
         self.assertEqual(outputs[2], "Opened folder: /tmp (stub)")
 
-    def test_executor_rejects_risky_desktop_actions_explicitly(self) -> None:
+    def test_executor_routes_confirm_required_desktop_actions_after_approval(self) -> None:
+        engine = self.make_engine()
+
+        shutdown_result = engine.execute(
+            Command(
+                name="shutdown",
+                action="shutdown",
+                arguments={},
+                source_text="shutdown",
+            )
+        )
+        restart_result = engine.execute(
+            Command(
+                name="restart",
+                action="restart",
+                arguments={},
+                source_text="restart",
+            )
+        )
+
+        self.assertEqual(shutdown_result, "Shutdown requested (stub)")
+        self.assertEqual(restart_result, "Restart requested (stub)")
+
+    def test_executor_keeps_blocked_desktop_actions_blocked(self) -> None:
         engine = self.make_engine()
 
         result = engine.execute(
             Command(
-                name="reject_shutdown",
-                action="reject_desktop_action",
-                arguments={"request": "shutdown"},
-                source_text="shutdown",
+                name="blocked_run_command",
+                action="blocked_desktop_action",
+                arguments={"request": "dir"},
+                source_text="run command dir",
             )
         )
 
-        self.assertEqual(result, "Desktop action is not approved in MVP: shutdown")
+        self.assertEqual(result, "Desktop action is blocked in MVP: dir")
 
     def test_executor_runs_workflow_in_order_against_excel_context(self) -> None:
         excel = StubExcelAdapter()

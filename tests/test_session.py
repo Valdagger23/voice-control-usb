@@ -68,6 +68,44 @@ class AssistantSessionTests(unittest.TestCase):
             self.assertIn("Unsupported command logged for review", output_stream.getvalue())
             self.assertTrue(proposal_path.exists())
 
+    def test_session_requires_confirmation_for_risky_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path, excel=StubExcelAdapter())
+            input_stream = StringIO("shutdown\nconfirm\nquit\n")
+            output_stream = StringIO()
+
+            result = run_session(app, input_stream, output_stream)
+
+            self.assertEqual(result.processed_commands, 2)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
+                    "Confirmed. Shutdown requested (stub)",
+                    "Session ended.",
+                ],
+            )
+
+    def test_session_can_cancel_pending_risky_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path, excel=StubExcelAdapter())
+            input_stream = StringIO("restart\ncancel\nquit\n")
+            output_stream = StringIO()
+
+            result = run_session(app, input_stream, output_stream)
+
+            self.assertEqual(result.processed_commands, 2)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "Confirmation required for risky action: restart. Type confirm to proceed or cancel.",
+                    "Canceled pending action: restart",
+                    "Session ended.",
+                ],
+            )
+
     def test_speech_session_routes_recognized_text_through_same_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"

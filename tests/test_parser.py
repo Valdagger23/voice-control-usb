@@ -34,6 +34,15 @@ class CommandParserTests(unittest.TestCase):
                 self.assertEqual(result.command.action, "run_workflow")
                 self.assertEqual(result.command.arguments["workflow_name"], expected_workflow)
 
+    def test_parse_confirmation_commands(self) -> None:
+        confirm = self.parser.parse("confirm")
+        cancel = self.parser.parse("cancel")
+
+        assert confirm.command is not None
+        assert cancel.command is not None
+        self.assertEqual(confirm.command.action, "confirm_pending")
+        self.assertEqual(cancel.command.action, "cancel_pending")
+
     def test_parse_workbook_context_commands(self) -> None:
         cases = (
             (
@@ -133,20 +142,36 @@ class CommandParserTests(unittest.TestCase):
 
     def test_parse_risky_desktop_commands_for_explicit_rejection(self) -> None:
         cases = (
-            ("shutdown", "shutdown"),
-            ("restart", "restart"),
-            ("kill process excel", "excel"),
-            ("run command dir", "dir"),
+            ("shutdown", "shutdown", "shutdown"),
+            ("restart", "restart", "restart"),
+            ("kill process excel", "blocked_desktop_action", "excel"),
+            ("run command dir", "blocked_desktop_action", "dir"),
         )
 
-        for raw_text, expected_request in cases:
+        for raw_text, expected_action, expected_request in cases:
             with self.subTest(raw_text=raw_text):
                 result = self.parser.parse(raw_text)
 
                 self.assertIsNotNone(result.command)
                 assert result.command is not None
-                self.assertEqual(result.command.action, "reject_desktop_action")
-                self.assertEqual(result.command.arguments["request"], expected_request)
+                self.assertEqual(result.command.action, expected_action)
+                if "request" in result.command.arguments:
+                    self.assertEqual(result.command.arguments["request"], expected_request)
+
+    def test_parse_risky_desktop_commands_requiring_confirmation(self) -> None:
+        cases = (
+            ("shutdown", "shutdown"),
+            ("restart", "restart"),
+        )
+
+        for raw_text, expected_action in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, expected_action)
+                self.assertEqual(result.command.source_text, raw_text)
 
     def test_parse_unknown_command_becomes_proposal(self) -> None:
         result = self.parser.parse("email the spreadsheet to finance")

@@ -9,22 +9,12 @@
 - Session mode preserves that context across multiple commands in one runtime.
 - Speech session mode must feed recognized text into the same typed command handling path.
 - Push-to-talk speech mode must use explicit activation and the same post-transcription command path.
+- Safety decisions must stay deterministic: allowed immediately, requires confirmation, or blocked in MVP.
 
 ## Supported phase-1 commands
 
 ### `open excel`
 Opens or attaches to an Excel session.
-
-## Approved workflows
-
-### `mark pass and next row`
-Runs an approved deterministic workflow that types `pass` and moves to the next anchored row.
-
-### `mark fail and next row`
-Runs an approved deterministic workflow that types `fail` and moves to the next anchored row.
-
-### `open excel and go to A1`
-Runs an approved deterministic workflow that opens Excel and moves to `A1`.
 
 ### `open app <ALIAS>`
 Opens an allowlisted desktop app alias through the desktop adapter.
@@ -89,6 +79,25 @@ Moves one row down from the current active cell.
 ### `next row from start`
 Moves to the next row and returns to the original start column established by `go to <CELL>`.
 
+### `confirm`
+Confirms the current pending risky action in session mode.
+If nothing is pending, the assistant returns `No pending action to confirm.`
+
+### `cancel`
+Cancels the current pending risky action in session mode.
+If nothing is pending, the assistant returns `No pending action to cancel.`
+
+## Approved workflows
+
+### `mark pass and next row`
+Runs an approved deterministic workflow that types `pass` and moves to the next anchored row.
+
+### `mark fail and next row`
+Runs an approved deterministic workflow that types `fail` and moves to the next anchored row.
+
+### `open excel and go to A1`
+Runs an approved deterministic workflow that opens Excel and moves to `A1`.
+
 Examples:
 - `open excel`
 - `open excel and go to A1`
@@ -106,6 +115,8 @@ Examples:
 - `type fail`
 - `save workbook`
 - `next row from start`
+- `confirm`
+- `cancel`
 
 ## Unsupported command handling
 If the text does not match the approved grammar, the assistant must not guess.
@@ -115,15 +126,37 @@ It should create a proposal entry containing:
 - rejection reason
 - timestamp or surrounding runtime metadata in later phases
 
-## Explicit MVP rejections
-The runtime also contains explicit deterministic rejections for risky desktop actions such as:
+## Safety handling
+Safe commands execute immediately.
 
+Risky commands currently requiring confirmation:
 - `shutdown`
 - `restart`
+
+Blocked commands remain blocked in MVP:
 - `kill process <NAME>`
 - `run command <TEXT>`
 
-These do not execute. They return a `not approved in MVP` response instead.
+One-shot mode:
+- `shutdown` and `restart` return a confirmation-required response and do not execute.
+
+Session mode:
+- `shutdown` or `restart` create a pending action.
+- `confirm` executes the pending action.
+- `cancel` clears the pending action without executing it.
+
+Workflows inherit the same policy.
+If any workflow step requires confirmation, the workflow pauses behind the same confirmation gate instead of bypassing it.
+If any workflow step is blocked in MVP, the workflow is blocked as well.
+
+## Explicit MVP blocked commands
+The runtime contains explicit deterministic handling for blocked desktop actions such as:
+
+- `kill process <NAME>`
+- `run command <TEXT>`
+
+These do not execute.
+They return a `blocked in MVP` response instead.
 
 ## Near-term planned commands
 - save workbook as

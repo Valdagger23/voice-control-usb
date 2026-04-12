@@ -42,6 +42,16 @@ class WindowsDesktopAdapter(DesktopAdapter):
         os.startfile(str(folder))  # type: ignore[attr-defined]
         return f"Opened folder: {folder}"
 
+    def shutdown(self) -> str:
+        self._ensure_windows()
+        subprocess.run(["shutdown", "/s", "/t", "0"], shell=False, check=False)
+        return "Shutdown requested"
+
+    def restart(self) -> str:
+        self._ensure_windows()
+        subprocess.run(["shutdown", "/r", "/t", "0"], shell=False, check=False)
+        return "Restart requested"
+
     def _ensure_windows(self) -> None:
         if sys.platform != "win32":
             raise RuntimeError("The Windows desktop adapter is only available on Windows.")

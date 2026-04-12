@@ -21,6 +21,12 @@ class DesktopAdapter:
     def open_folder(self, path: str) -> str:
         raise NotImplementedError
 
+    def shutdown(self) -> str:
+        raise NotImplementedError
+
+    def restart(self) -> str:
+        raise NotImplementedError
+
 
 @dataclass
 class StubDesktopAdapter(DesktopAdapter):
@@ -44,6 +50,12 @@ class StubDesktopAdapter(DesktopAdapter):
         if not folder.exists() or not folder.is_dir():
             return f"Desktop folder is not available: {folder}"
         return f"Opened folder: {folder} (stub)"
+
+    def shutdown(self) -> str:
+        return "Shutdown requested (stub)"
+
+    def restart(self) -> str:
+        return "Restart requested (stub)"
 
     def _is_allowed_url(self, url: str) -> bool:
         parsed = urlparse(url)

@@ -40,7 +40,9 @@ Not allowed:
 - nested workflows
 - actions that do not exist in the approved engine action set
 
-Risky desktop actions remain rejected even when used in the runtime generally.
+Workflows inherit the same safety policy as base commands.
+If a workflow step requires confirmation, the workflow is paused behind the confirmation gate.
+If a workflow step is blocked in MVP, the workflow is blocked as well.
 
 ## Initial workflows
 

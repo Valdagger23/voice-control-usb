@@ -27,7 +27,9 @@ class ExecutionEngine:
             "open_app": self._handle_open_app,
             "open_url": self._handle_open_url,
             "open_folder": self._handle_open_folder,
-            "reject_desktop_action": self._handle_reject_desktop_action,
+            "shutdown": self._handle_shutdown,
+            "restart": self._handle_restart,
+            "blocked_desktop_action": self._handle_blocked_desktop_action,
             "open_workbook": self._handle_open_workbook,
             "select_sheet": self._handle_select_sheet,
             "save_workbook": self._handle_save_workbook,
@@ -78,9 +80,15 @@ class ExecutionEngine:
     def _handle_open_folder(self, command: Command) -> str:
         return self.desktop.open_folder(command.arguments["path"])
 
-    def _handle_reject_desktop_action(self, command: Command) -> str:
+    def _handle_shutdown(self, command: Command) -> str:
+        return self.desktop.shutdown()
+
+    def _handle_restart(self, command: Command) -> str:
+        return self.desktop.restart()
+
+    def _handle_blocked_desktop_action(self, command: Command) -> str:
         request = command.arguments["request"]
-        return f"Desktop action is not approved in MVP: {request}"
+        return f"Desktop action is blocked in MVP: {request}"
 
     def _handle_open_workbook(self, command: Command) -> str:
         return self.excel.open_workbook(command.arguments["path"])

@@ -15,9 +15,20 @@
 - Parse only approved command grammar.
 - Reject ambiguous or unsupported inputs.
 - Log unsupported requests as proposals for review instead of mutating the system automatically.
-- Explicitly reject risky desktop commands such as shutdown, restart, kill process, or arbitrary command execution.
+- Classify approved actions deterministically as allowed immediately, requires confirmation, or blocked in MVP.
+- Require explicit `confirm` before executing risky commands such as `shutdown` or `restart`.
+- Keep `kill process <NAME>` and `run command <TEXT>` blocked in MVP.
 - Allow workflows to reuse only existing approved actions from the deterministic engine.
 - Do not allow nested workflows or arbitrary execution hooks in workflow definitions.
+- Apply the same safety policy to workflow steps so a risky step cannot bypass confirmation.
+
+## Confirmation flow
+- One-shot mode never executes confirm-required actions immediately.
+- One-shot risky commands return a confirmation-required response and exit.
+- Session mode stores one pending risky action at a time.
+- `confirm` executes the pending action through the normal engine path.
+- `cancel` clears the pending action without executing it.
+- If there is no pending action, `confirm` and `cancel` return a deterministic no-op response.
 
 ## Excel safety
 - Prefer object-level Excel APIs.
@@ -32,7 +43,7 @@
 - Do not use arbitrary shell execution.
 - Do not use `shell=True`.
 - Limit URLs to approved `http` and `https` forms.
-- Keep risky OS-control actions out of MVP even when the parser recognizes them.
+- Keep destructive OS-control actions gated or blocked even when the parser recognizes them.
 
 ## AI safety for early phases
 - AI may help draft reviewed proposals later, but phase 1 does not allow live self-modifying code.

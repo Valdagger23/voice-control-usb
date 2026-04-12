@@ -34,6 +34,18 @@
       }
     },
     {
+      "name": "confirm_pending",
+      "action": "confirm_pending",
+      "description": "Confirm the currently pending risky action.",
+      "pattern": "^confirm$"
+    },
+    {
+      "name": "cancel_pending",
+      "action": "cancel_pending",
+      "description": "Cancel the currently pending risky action.",
+      "pattern": "^cancel$"
+    },
+    {
       "name": "open_app",
       "action": "open_app",
       "description": "Open an allowlisted desktop application by alias.",
@@ -59,25 +71,19 @@
     },
     {
       "name": "reject_shutdown",
-      "action": "reject_desktop_action",
-      "description": "Explicitly reject shutdown in the MVP.",
-      "pattern": "^shutdown$",
-      "fixed_arguments": {
-        "request": "shutdown"
-      }
+      "action": "shutdown",
+      "description": "Request a controlled system shutdown with confirmation.",
+      "pattern": "^shutdown$"
     },
     {
       "name": "reject_restart",
-      "action": "reject_desktop_action",
-      "description": "Explicitly reject restart in the MVP.",
-      "pattern": "^restart$",
-      "fixed_arguments": {
-        "request": "restart"
-      }
+      "action": "restart",
+      "description": "Request a controlled system restart with confirmation.",
+      "pattern": "^restart$"
     },
     {
       "name": "reject_kill_process",
-      "action": "reject_desktop_action",
+      "action": "blocked_desktop_action",
       "description": "Explicitly reject killing processes in the MVP.",
       "pattern": "^kill process (?P<request>.+)$",
       "argument_transforms": {
@@ -86,7 +92,7 @@
     },
     {
       "name": "reject_run_command",
-      "action": "reject_desktop_action",
+      "action": "blocked_desktop_action",
       "description": "Explicitly reject arbitrary command execution in the MVP.",
       "pattern": "^run command (?P<request>.+)$",
       "argument_transforms": {
