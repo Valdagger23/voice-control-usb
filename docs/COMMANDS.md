@@ -11,19 +11,35 @@
 ### `open excel`
 Opens or attaches to an Excel session.
 
-### `read cell <CELL>`
-Reads a single cell from the active worksheet.
+### `go to <CELL>`
+Moves the active Excel location to a specific cell and sets the start column for the current row-entry block.
 
 Examples:
-- `read cell A1`
-- `read cell AA10`
+- `go to A123`
+- `go to C7`
 
-### `write cell <CELL> value <TEXT>`
-Writes plain text to a single cell in the active worksheet.
+### `type pass`
+Types `pass` into the current active cell.
+
+### `type fail`
+Types `fail` into the current active cell.
+
+### `go right`
+Moves one column to the right from the current active cell.
+
+### `go down`
+Moves one row down from the current active cell.
+
+### `next row from start`
+Moves to the next row and returns to the original start column established by `go to <CELL>`.
 
 Examples:
-- `write cell B2 value hello`
-- `write cell C10 value quarterly total`
+- `open excel`
+- `go to A123`
+- `type pass`
+- `go right`
+- `type fail`
+- `next row from start`
 
 ## Unsupported command handling
 If the text does not match the approved grammar, the assistant must not guess.
@@ -37,5 +53,5 @@ It should create a proposal entry containing:
 - open workbook
 - save workbook
 - select worksheet
-- read range
-- write range
+- go left
+- repeat current row pattern

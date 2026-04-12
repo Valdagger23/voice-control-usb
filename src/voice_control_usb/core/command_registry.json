@@ -1,0 +1,55 @@
+{
+  "commands": [
+    {
+      "name": "open_excel",
+      "action": "open_excel",
+      "description": "Launch or attach to Microsoft Excel.",
+      "pattern": "^open excel$"
+    },
+    {
+      "name": "go_to_cell",
+      "action": "go_to_cell",
+      "description": "Move the active Excel selection to a specific cell.",
+      "pattern": "^go to (?P<cell>[A-Za-z]{1,3}[1-9][0-9]{0,6})$",
+      "argument_transforms": {
+        "cell": "upper"
+      }
+    },
+    {
+      "name": "type_pass",
+      "action": "type_text",
+      "description": "Type 'pass' into the active cell.",
+      "pattern": "^type pass$",
+      "fixed_arguments": {
+        "value": "pass"
+      }
+    },
+    {
+      "name": "type_fail",
+      "action": "type_text",
+      "description": "Type 'fail' into the active cell.",
+      "pattern": "^type fail$",
+      "fixed_arguments": {
+        "value": "fail"
+      }
+    },
+    {
+      "name": "go_right",
+      "action": "go_right",
+      "description": "Move the active selection one column to the right.",
+      "pattern": "^go right$"
+    },
+    {
+      "name": "go_down",
+      "action": "go_down",
+      "description": "Move the active selection one row down.",
+      "pattern": "^go down$"
+    },
+    {
+      "name": "next_row_from_start",
+      "action": "next_row_from_start",
+      "description": "Move to the next row and return to the start column for the current data-entry block.",
+      "pattern": "^next row from start$"
+    }
+  ]
+}

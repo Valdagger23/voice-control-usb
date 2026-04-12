@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import re
-
-from voice_control_usb.core.models import Command, CommandName, ParseResult, UnsupportedProposal
-
-CELL_RE = re.compile(r"^[A-Z]{1,3}[1-9][0-9]{0,6}$")
+from voice_control_usb.core.models import Command, ParseResult, UnsupportedProposal
+from voice_control_usb.core.registry import CommandRegistry
 
 
 class CommandParser:
-    """Parse a narrow command language into structured commands."""
+    """Parse text by consulting the external deterministic command registry."""
+
+    def __init__(self, registry: CommandRegistry | None = None) -> None:
+        self.registry = registry or CommandRegistry.load_default()
 
     def parse(self, text: str) -> ParseResult:
         normalized = " ".join(text.strip().split())
@@ -22,57 +22,46 @@ class CommandParser:
                 )
             )
 
-        lowered = normalized.casefold()
-        if lowered == "open excel":
-            return ParseResult(
-                command=Command(
-                    name=CommandName.OPEN_EXCEL,
-                    source_text=normalized,
-                )
-            )
+        for definition in self.registry.definitions:
+            match = definition.regex.fullmatch(normalized)
+            if not match:
+                continue
 
-        if lowered.startswith("read cell "):
-            cell = normalized[len("read cell ") :].strip().upper()
-            if self._is_cell_reference(cell):
-                return ParseResult(
-                    command=Command(
-                        name=CommandName.READ_CELL,
-                        arguments={"cell": cell},
-                        source_text=normalized,
-                    )
-                )
-            return self._unsupported(normalized, "Cell reference must look like A1 or AA10.")
-
-        if lowered.startswith("write cell "):
-            remainder = normalized[len("write cell ") :].strip()
-            cell, separator, value = remainder.partition(" value ")
-            if not separator:
-                return self._unsupported(
-                    normalized,
-                    "Write command must use 'write cell <CELL> value <TEXT>'.",
-                )
-
-            cell = cell.strip().upper()
-            if not self._is_cell_reference(cell):
-                return self._unsupported(normalized, "Cell reference must look like A1 or AA10.")
-            if not value:
-                return self._unsupported(normalized, "Write command requires a non-empty value.")
+            arguments = {
+                key: value
+                for key, value in match.groupdict().items()
+                if value is not None
+            }
+            arguments.update(definition.fixed_arguments)
+            arguments = self._apply_transforms(arguments, definition.argument_transforms)
 
             return ParseResult(
                 command=Command(
-                    name=CommandName.WRITE_CELL,
-                    arguments={"cell": cell, "value": value},
+                    name=definition.name,
+                    action=definition.action,
+                    arguments=arguments,
                     source_text=normalized,
                 )
             )
 
         return self._unsupported(
             normalized,
-            "Command is not part of the approved deterministic MVP command set.",
+            "Command is not part of the approved deterministic command registry.",
         )
 
-    def _is_cell_reference(self, value: str) -> bool:
-        return bool(CELL_RE.fullmatch(value))
+    def _apply_transforms(
+        self,
+        arguments: dict[str, str],
+        transforms: dict[str, str],
+    ) -> dict[str, str]:
+        transformed = dict(arguments)
+        for argument, transform in transforms.items():
+            value = transformed.get(argument)
+            if value is None:
+                continue
+            if transform == "upper":
+                transformed[argument] = value.upper()
+        return transformed
 
     def _unsupported(self, text: str, reason: str) -> ParseResult:
         return ParseResult(

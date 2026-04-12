@@ -21,8 +21,12 @@ Ship a practical deterministic skeleton that proves the architecture without ove
 
 ## Initial command scope
 - `open excel`
-- `read cell <CELL>`
-- `write cell <CELL> value <TEXT>`
+- `go to <CELL>`
+- `type pass`
+- `type fail`
+- `go right`
+- `go down`
+- `next row from start`
 
 ## Ordered next implementation steps
 1. Replace the stub Excel adapter with a Windows COM-backed adapter behind the same interface.

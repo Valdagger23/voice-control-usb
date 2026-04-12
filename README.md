@@ -21,3 +21,4 @@ Build the deterministic core:
 ## Local verification
 - `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
+- `PYTHONPATH=src .venv/bin/python -m voice_control_usb "go to A123"`
