@@ -46,6 +46,12 @@
       "pattern": "^cancel$"
     },
     {
+      "name": "report_status",
+      "action": "report_status",
+      "description": "Report the current pending confirmation state.",
+      "pattern": "^status$"
+    },
+    {
       "name": "open_app",
       "action": "open_app",
       "description": "Open an allowlisted desktop application by alias.",

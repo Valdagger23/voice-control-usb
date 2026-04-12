@@ -47,12 +47,15 @@ Blocked in MVP:
 - `run command <TEXT>`
 
 One-shot behavior:
-- `shutdown` and `restart` return a confirmation-required response and do not execute.
+- `shutdown` and `restart` return a `[CONFIRMATION REQUIRED]` response and do not execute.
+- `status` reports that no pending confirmation action exists in one-shot mode.
 
 Session behavior:
 - `shutdown` and `restart` create a pending action.
+- `status` reports the currently queued risky action.
 - `confirm` executes the pending action.
 - `cancel` drops the pending action.
+- Optional pending-action timeout support exists in the assistant flow, but it is disabled by default.
 
 Blocked examples:
 - `Desktop action is blocked in MVP: dir`
@@ -67,7 +70,9 @@ PYTHONPATH=src .venv/bin/python -m voice_control_usb "open app notepad"
 PYTHONPATH=src .venv/bin/python -m voice_control_usb "open url https://example.com"
 PYTHONPATH=src .venv/bin/python -m voice_control_usb "open folder /tmp"
 PYTHONPATH=src .venv/bin/python -m voice_control_usb "shutdown"
+PYTHONPATH=src .venv/bin/python -m voice_control_usb "status"
 printf 'shutdown\nconfirm\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session
+printf 'shutdown\nstatus\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session
 ```
 
 Windows:

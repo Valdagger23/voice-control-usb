@@ -81,8 +81,27 @@ class AssistantSessionTests(unittest.TestCase):
             self.assertEqual(
                 output_stream.getvalue().splitlines(),
                 [
-                    "Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
+                    "[CONFIRMATION REQUIRED] Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
                     "Confirmed. Shutdown requested (stub)",
+                    "Session ended.",
+                ],
+            )
+
+    def test_session_status_reports_pending_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path, excel=StubExcelAdapter())
+            input_stream = StringIO("shutdown\nstatus\nquit\n")
+            output_stream = StringIO()
+
+            result = run_session(app, input_stream, output_stream)
+
+            self.assertEqual(result.processed_commands, 2)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "[CONFIRMATION REQUIRED] Confirmation required for risky action: shutdown. Type confirm to proceed or cancel.",
+                    "Pending confirmation: shutdown. Type confirm to proceed or cancel.",
                     "Session ended.",
                 ],
             )
@@ -100,7 +119,7 @@ class AssistantSessionTests(unittest.TestCase):
             self.assertEqual(
                 output_stream.getvalue().splitlines(),
                 [
-                    "Confirmation required for risky action: restart. Type confirm to proceed or cancel.",
+                    "[CONFIRMATION REQUIRED] Confirmation required for risky action: restart. Type confirm to proceed or cancel.",
                     "Canceled pending action: restart",
                     "Session ended.",
                 ],

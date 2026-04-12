@@ -24,11 +24,14 @@
 
 ## Confirmation flow
 - One-shot mode never executes confirm-required actions immediately.
-- One-shot risky commands return a confirmation-required response and exit.
+- One-shot risky commands return a `[CONFIRMATION REQUIRED]` response and exit.
 - Session mode stores one pending risky action at a time.
+- `status` reports the current pending confirmation state without changing it.
 - `confirm` executes the pending action through the normal engine path.
 - `cancel` clears the pending action without executing it.
 - If there is no pending action, `confirm` and `cancel` return a deterministic no-op response.
+- Pending-action timeout support is wired into the assistant flow but disabled by default.
+- If timeout is enabled, expired pending actions are cleared before the next command is processed.
 
 ## Excel safety
 - Prefer object-level Excel APIs.

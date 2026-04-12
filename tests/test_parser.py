@@ -37,11 +37,14 @@ class CommandParserTests(unittest.TestCase):
     def test_parse_confirmation_commands(self) -> None:
         confirm = self.parser.parse("confirm")
         cancel = self.parser.parse("cancel")
+        status = self.parser.parse("status")
 
         assert confirm.command is not None
         assert cancel.command is not None
+        assert status.command is not None
         self.assertEqual(confirm.command.action, "confirm_pending")
         self.assertEqual(cancel.command.action, "cancel_pending")
+        self.assertEqual(status.command.action, "report_status")
 
     def test_parse_workbook_context_commands(self) -> None:
         cases = (

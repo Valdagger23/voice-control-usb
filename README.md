@@ -35,7 +35,7 @@ Build the deterministic core:
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
 - Push-to-talk speech mode: `--session --input-mode speech --speech-activation ptt` uses Enter as the recording trigger in terminal sessions
-- Safety flow: safe commands run immediately, `shutdown` and `restart` require `confirm` in session mode, and blocked MVP actions still do not execute
+- Safety flow: safe commands run immediately, risky commands raise a clear `[CONFIRMATION REQUIRED]` alert, `status` reports pending confirmation state, and blocked MVP actions still do not execute
 
 ## Workflows
 - Approved multi-step macros are registry-driven
@@ -52,7 +52,9 @@ Build the deterministic core:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open url https://example.com"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open folder /tmp"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "shutdown"`
+- `PYTHONPATH=src .venv/bin/python -m voice_control_usb "status"`
 - `printf 'shutdown\nconfirm\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
+- `printf 'shutdown\nstatus\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `printf 'restart\ncancel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `printf 'open workbook /tmp/context.xlsx\nselect sheet Sheet2\ngo to A123\ntype pass\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `printf 'record open workbook /tmp/context.xlsx\nrecord select sheet Sheet2\nrecord go to A123\nrecord type pass\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech`

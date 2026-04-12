@@ -87,6 +87,11 @@ If nothing is pending, the assistant returns `No pending action to confirm.`
 Cancels the current pending risky action in session mode.
 If nothing is pending, the assistant returns `No pending action to cancel.`
 
+### `status`
+Reports whether a risky action is currently pending confirmation.
+If one is pending, the response includes the queued action and next step.
+If none is pending, the assistant returns `No pending confirmation action.`
+
 ## Approved workflows
 
 ### `mark pass and next row`
@@ -117,6 +122,7 @@ Examples:
 - `next row from start`
 - `confirm`
 - `cancel`
+- `status`
 
 ## Unsupported command handling
 If the text does not match the approved grammar, the assistant must not guess.
@@ -138,12 +144,19 @@ Blocked commands remain blocked in MVP:
 - `run command <TEXT>`
 
 One-shot mode:
-- `shutdown` and `restart` return a confirmation-required response and do not execute.
+- `shutdown` and `restart` return a `[CONFIRMATION REQUIRED]` response and do not execute.
+- `status` reports that no pending confirmation exists because one-shot mode does not preserve state after the command finishes.
 
 Session mode:
-- `shutdown` or `restart` create a pending action.
+- `shutdown` or `restart` create a pending action and surface a clear confirmation alert.
 - `confirm` executes the pending action.
 - `cancel` clears the pending action without executing it.
+- `status` reports the currently pending action, if any.
+
+Pending-action expiry:
+- Session mode supports an optional pending-action timeout structure.
+- The current runtime keeps timeout disabled by default.
+- If enabled by configuration, expired pending actions are cleared before the next command is handled.
 
 Workflows inherit the same policy.
 If any workflow step requires confirmation, the workflow pauses behind the same confirmation gate instead of bypassing it.
