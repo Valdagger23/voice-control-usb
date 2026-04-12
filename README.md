@@ -18,6 +18,13 @@ Build the deterministic core:
 - VS Code
 - Codex
 
+## Trusted USB starter
+- Local starter config is JSON-based and separate from the USB-hosted assistant
+- Trust requires both the expected USB volume label and a marker file in the USB root
+- The starter launches the assistant with a direct Python module command and `shell=False`
+- Duplicate launches are prevented while the tracked assistant process is still running
+- Details: [docs/USB_STARTER_SPEC.md](docs/USB_STARTER_SPEC.md)
+
 ## Excel adapter selection
 - Default: stub adapter for WSL/dev and tests
 - Windows COM adapter: `--excel-adapter com`
@@ -67,6 +74,7 @@ Build the deterministic core:
 - `python -m voice_control_usb --excel-adapter com "go to A123"`
 - `python -m voice_control_usb --desktop-adapter windows "open app notepad"`
 - `python -m voice_control_usb --desktop-adapter windows "open url https://example.com"`
+- `python -m voice_control_usb.starter.cli --config C:\ProgramData\voice-control-usb\starter.json --once`
 - Session mode is available with `python -m voice_control_usb --excel-adapter com --session`
 - Speech session mode is available with `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 
