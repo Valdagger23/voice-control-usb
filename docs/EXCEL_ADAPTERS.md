@@ -13,12 +13,15 @@ Two implementations now exist:
 The CLI defaults to the stub adapter.
 One-shot CLI invocations run a single command and exit.
 Session mode keeps one assistant process alive, so workbook and worksheet context persists across commands in that session.
+Speech session mode reuses the same assistant process and adapter state after transcription.
 
 Examples:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
 - `printf 'open excel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
+- `printf 'record open excel\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech`
 - `python -m voice_control_usb --excel-adapter com "open excel"`
 - `python -m voice_control_usb --excel-adapter com --session`
+- `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 
 You can also select the adapter through:
 - `VOICE_CONTROL_USB_EXCEL_ADAPTER=stub`
@@ -41,6 +44,7 @@ The stub preserves deterministic workbook, sheet, and movement semantics for:
 - `next row from start`
 
 No live Excel process is controlled in WSL.
+Speech input is also stubbed in WSL through a manual text transcriber.
 
 ## Manual WSL verification
 Run these from the repository root:
@@ -48,6 +52,7 @@ Run these from the repository root:
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 printf 'open workbook /tmp/context.xlsx\nselect sheet Sheet2\nreport current sheet\ngo to A123\ntype pass\ngo right\ntype fail\nsave workbook\nnext row from start\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session
+printf 'record open workbook /tmp/context.xlsx\nrecord select sheet Sheet2\nrecord report current sheet\nrecord go to A123\nrecord type pass\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech
 ```
 
 Expected behavior:
@@ -106,6 +111,16 @@ save workbook
 next row from start
 quit
 "@ | python -m voice_control_usb --excel-adapter com --session
+
+@"
+record open excel
+record open workbook C:\path\to\context.xlsx
+record select sheet Sheet2
+record report current sheet
+record go to A123
+record type pass
+quit
+"@ | python -m voice_control_usb --excel-adapter com --session --input-mode speech
 ```
 
 Expected behavior:

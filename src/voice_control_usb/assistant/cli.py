@@ -8,7 +8,8 @@ from pathlib import Path
 import sys
 
 from voice_control_usb.assistant.app import AssistantApp
-from voice_control_usb.assistant.session import run_session
+from voice_control_usb.assistant.session import run_session, run_speech_session
+from voice_control_usb.audio.factory import create_speech_transcriber
 from voice_control_usb.excel.factory import create_excel_adapter
 
 
@@ -30,6 +31,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Run a long-lived session and read one command per line from stdin.",
     )
     parser.add_argument(
+        "--input-mode",
+        default=os.environ.get("VOICE_CONTROL_USB_INPUT_MODE", "typed"),
+        choices=("typed", "speech"),
+        help="Choose typed or speech input for session mode.",
+    )
+    parser.add_argument(
+        "--speech-provider",
+        default=os.environ.get("VOICE_CONTROL_USB_SPEECH_PROVIDER", "stub"),
+        help="Select the speech transcriber provider for speech session mode.",
+    )
+    parser.add_argument(
         "command",
         nargs="*",
         help="Deterministic command text to run in one-shot mode.",
@@ -44,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     namespace = parser.parse_args(raw_args)
     if not namespace.session and not namespace.command:
         parser.error("one-shot mode requires a command, or use --session")
+    if namespace.input_mode == "speech" and not namespace.session:
+        parser.error("speech input mode requires --session")
 
     try:
         excel = create_excel_adapter(namespace.excel_adapter)
@@ -56,6 +70,15 @@ def main(argv: list[str] | None = None) -> int:
         excel=excel,
     )
     if namespace.session:
+        if namespace.input_mode == "speech":
+            try:
+                transcriber = create_speech_transcriber(namespace.speech_provider)
+            except ValueError as error:
+                print(str(error))
+                return 2
+            run_speech_session(app, transcriber, sys.stdin, sys.stdout)
+            return 0
+
         run_session(app, sys.stdin, sys.stdout)
         return 0
 

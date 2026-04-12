@@ -7,6 +7,7 @@
 - Excel-oriented actions should target object-level operations first.
 - Workbook and worksheet context are maintained within the active assistant process.
 - Session mode preserves that context across multiple commands in one runtime.
+- Speech session mode must feed recognized text into the same typed command handling path.
 
 ## Supported phase-1 commands
 
