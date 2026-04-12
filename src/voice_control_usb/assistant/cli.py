@@ -10,6 +10,7 @@ import sys
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.audio.factory import create_speech_transcriber
+from voice_control_usb.desktop.factory import create_desktop_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
 
 
@@ -24,6 +25,12 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("VOICE_CONTROL_USB_EXCEL_ADAPTER", "stub"),
         choices=("stub", "com"),
         help="Select the Excel adapter implementation.",
+    )
+    parser.add_argument(
+        "--desktop-adapter",
+        default=os.environ.get("VOICE_CONTROL_USB_DESKTOP_ADAPTER", "stub"),
+        choices=("stub", "windows"),
+        help="Select the desktop adapter implementation.",
     )
     parser.add_argument(
         "--session",
@@ -61,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         excel = create_excel_adapter(namespace.excel_adapter)
+        desktop = create_desktop_adapter(namespace.desktop_adapter)
     except (ImportError, RuntimeError, ValueError) as error:
         print(str(error))
         return 2
@@ -68,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     app = AssistantApp(
         proposal_path=Path("runtime/proposals/unsupported_commands.jsonl"),
         excel=excel,
+        desktop=desktop,
     )
     if namespace.session:
         if namespace.input_mode == "speech":

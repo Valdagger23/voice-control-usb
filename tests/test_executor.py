@@ -3,14 +3,25 @@
 import unittest
 
 from voice_control_usb.core.models import Command
+from voice_control_usb.desktop.adapter import StubDesktopAdapter
+from voice_control_usb.desktop.registry import AppAliasRegistry
 from voice_control_usb.excel.adapter import StubExcelAdapter
 from voice_control_usb.executor.engine import ExecutionEngine
 
 
 class ExecutionEngineTests(unittest.TestCase):
+    def make_engine(self) -> ExecutionEngine:
+        return ExecutionEngine(
+            excel=StubExcelAdapter(),
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
+
     def test_executor_routes_workbook_and_sheet_context_commands(self) -> None:
         excel = StubExcelAdapter()
-        engine = ExecutionEngine(excel=excel)
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
 
         outputs = [
             engine.execute(
@@ -55,7 +66,7 @@ class ExecutionEngineTests(unittest.TestCase):
         self.assertEqual(excel.current_context().workbook_name, "audit.xlsx")
 
     def test_executor_routes_navigation_and_data_entry_workflow(self) -> None:
-        engine = ExecutionEngine(excel=StubExcelAdapter())
+        engine = self.make_engine()
         commands = [
             Command(
                 name="open_excel",
@@ -108,7 +119,10 @@ class ExecutionEngineTests(unittest.TestCase):
 
     def test_executor_routes_go_down(self) -> None:
         excel = StubExcelAdapter()
-        engine = ExecutionEngine(excel=excel)
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
         engine.execute(
             Command(
                 name="go_to_cell",
@@ -131,7 +145,10 @@ class ExecutionEngineTests(unittest.TestCase):
 
     def test_sheet_selection_preserves_per_sheet_navigation_context(self) -> None:
         excel = StubExcelAdapter()
-        engine = ExecutionEngine(excel=excel)
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
 
         engine.execute(
             Command(
@@ -184,6 +201,54 @@ class ExecutionEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(result, "Moved to next row start at B3")
+
+    def test_executor_routes_desktop_actions_through_stub_adapter(self) -> None:
+        engine = self.make_engine()
+
+        outputs = [
+            engine.execute(
+                Command(
+                    name="open_app",
+                    action="open_app",
+                    arguments={"app_alias": "notepad"},
+                    source_text="open app notepad",
+                )
+            ),
+            engine.execute(
+                Command(
+                    name="open_url",
+                    action="open_url",
+                    arguments={"url": "https://example.com"},
+                    source_text="open url https://example.com",
+                )
+            ),
+            engine.execute(
+                Command(
+                    name="open_folder",
+                    action="open_folder",
+                    arguments={"path": "/tmp"},
+                    source_text="open folder /tmp",
+                )
+            ),
+        ]
+
+        self.assertEqual(outputs[0], "Opened app alias: notepad (stub)")
+        self.assertEqual(outputs[1], "Opened URL: https://example.com (stub)")
+        self.assertEqual(outputs[2], "Opened folder: /tmp (stub)")
+
+    def test_executor_rejects_risky_desktop_actions_explicitly(self) -> None:
+        engine = self.make_engine()
+
+        result = engine.execute(
+            Command(
+                name="reject_shutdown",
+                action="reject_desktop_action",
+                arguments={"request": "shutdown"},
+                source_text="shutdown",
+            )
+        )
+
+        self.assertEqual(result, "Desktop action is not approved in MVP: shutdown")
 
 
 if __name__ == "__main__":

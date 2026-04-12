@@ -15,6 +15,7 @@
 - Parse only approved command grammar.
 - Reject ambiguous or unsupported inputs.
 - Log unsupported requests as proposals for review instead of mutating the system automatically.
+- Explicitly reject risky desktop commands such as shutdown, restart, kill process, or arbitrary command execution.
 
 ## Excel safety
 - Prefer object-level Excel APIs.
@@ -23,6 +24,13 @@
 - Use the stub adapter by default in WSL so automated tests do not depend on a live Excel process.
 - Require explicit adapter selection before using the Windows COM path.
 - Keep workbook and sheet targeting explicit so save and sheet-selection commands operate on a known active context.
+
+## Desktop safety
+- Launch desktop apps only through allowlisted aliases.
+- Do not use arbitrary shell execution.
+- Do not use `shell=True`.
+- Limit URLs to approved `http` and `https` forms.
+- Keep risky OS-control actions out of MVP even when the parser recognizes them.
 
 ## AI safety for early phases
 - AI may help draft reviewed proposals later, but phase 1 does not allow live self-modifying code.

@@ -5,16 +5,22 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from voice_control_usb.core.models import Command
+from voice_control_usb.desktop.adapter import DesktopAdapter
 from voice_control_usb.excel.adapter import ExcelAdapter
 
 
 class ExecutionEngine:
     """Route parsed commands to approved execution handlers."""
 
-    def __init__(self, excel: ExcelAdapter) -> None:
+    def __init__(self, excel: ExcelAdapter, desktop: DesktopAdapter) -> None:
         self.excel = excel
+        self.desktop = desktop
         self.handlers: dict[str, Callable[[Command], str]] = {
             "open_excel": self._handle_open_excel,
+            "open_app": self._handle_open_app,
+            "open_url": self._handle_open_url,
+            "open_folder": self._handle_open_folder,
+            "reject_desktop_action": self._handle_reject_desktop_action,
             "open_workbook": self._handle_open_workbook,
             "select_sheet": self._handle_select_sheet,
             "save_workbook": self._handle_save_workbook,
@@ -35,6 +41,19 @@ class ExecutionEngine:
 
     def _handle_open_excel(self, command: Command) -> str:
         return self.excel.open_excel()
+
+    def _handle_open_app(self, command: Command) -> str:
+        return self.desktop.open_app(command.arguments["app_alias"])
+
+    def _handle_open_url(self, command: Command) -> str:
+        return self.desktop.open_url(command.arguments["url"])
+
+    def _handle_open_folder(self, command: Command) -> str:
+        return self.desktop.open_folder(command.arguments["path"])
+
+    def _handle_reject_desktop_action(self, command: Command) -> str:
+        request = command.arguments["request"]
+        return f"Desktop action is not approved in MVP: {request}"
 
     def _handle_open_workbook(self, command: Command) -> str:
         return self.excel.open_workbook(command.arguments["path"])

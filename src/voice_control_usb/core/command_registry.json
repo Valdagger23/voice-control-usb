@@ -7,6 +7,66 @@
       "pattern": "^open excel$"
     },
     {
+      "name": "open_app",
+      "action": "open_app",
+      "description": "Open an allowlisted desktop application by alias.",
+      "pattern": "^open app (?P<app_alias>[A-Za-z0-9_-]+)$",
+      "argument_transforms": {
+        "app_alias": "lower"
+      }
+    },
+    {
+      "name": "open_url",
+      "action": "open_url",
+      "description": "Open an approved URL through the desktop adapter.",
+      "pattern": "^open url (?P<url>\\S+)$"
+    },
+    {
+      "name": "open_folder",
+      "action": "open_folder",
+      "description": "Open a folder path through the desktop adapter.",
+      "pattern": "^open folder (?P<path>.+)$",
+      "argument_transforms": {
+        "path": "strip"
+      }
+    },
+    {
+      "name": "reject_shutdown",
+      "action": "reject_desktop_action",
+      "description": "Explicitly reject shutdown in the MVP.",
+      "pattern": "^shutdown$",
+      "fixed_arguments": {
+        "request": "shutdown"
+      }
+    },
+    {
+      "name": "reject_restart",
+      "action": "reject_desktop_action",
+      "description": "Explicitly reject restart in the MVP.",
+      "pattern": "^restart$",
+      "fixed_arguments": {
+        "request": "restart"
+      }
+    },
+    {
+      "name": "reject_kill_process",
+      "action": "reject_desktop_action",
+      "description": "Explicitly reject killing processes in the MVP.",
+      "pattern": "^kill process (?P<request>.+)$",
+      "argument_transforms": {
+        "request": "strip"
+      }
+    },
+    {
+      "name": "reject_run_command",
+      "action": "reject_desktop_action",
+      "description": "Explicitly reject arbitrary command execution in the MVP.",
+      "pattern": "^run command (?P<request>.+)$",
+      "argument_transforms": {
+        "request": "strip"
+      }
+    },
+    {
       "name": "open_workbook",
       "action": "open_workbook",
       "description": "Open a workbook from a specific path.",

@@ -44,6 +44,24 @@ class CommandParserTests(unittest.TestCase):
                 "report_current_sheet",
                 {},
             ),
+            (
+                "open app notepad",
+                "open_app",
+                "open_app",
+                {"app_alias": "notepad"},
+            ),
+            (
+                "open url https://example.com",
+                "open_url",
+                "open_url",
+                {"url": "https://example.com"},
+            ),
+            (
+                "open folder /tmp",
+                "open_folder",
+                "open_folder",
+                {"path": "/tmp"},
+            ),
         )
 
         for raw_text, expected_name, expected_action, expected_arguments in cases:
@@ -96,6 +114,23 @@ class CommandParserTests(unittest.TestCase):
                 assert result.command is not None
                 self.assertEqual(result.command.name, expected_name)
                 self.assertEqual(result.command.action, expected_name)
+
+    def test_parse_risky_desktop_commands_for_explicit_rejection(self) -> None:
+        cases = (
+            ("shutdown", "shutdown"),
+            ("restart", "restart"),
+            ("kill process excel", "excel"),
+            ("run command dir", "dir"),
+        )
+
+        for raw_text, expected_request in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, "reject_desktop_action")
+                self.assertEqual(result.command.arguments["request"], expected_request)
 
     def test_parse_unknown_command_becomes_proposal(self) -> None:
         result = self.parser.parse("email the spreadsheet to finance")

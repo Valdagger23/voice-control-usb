@@ -1,0 +1,16 @@
+{
+  "apps": {
+    "notepad": {
+      "description": "Windows Notepad",
+      "windows_command": ["notepad.exe"]
+    },
+    "calculator": {
+      "description": "Windows Calculator",
+      "windows_command": ["calc.exe"]
+    },
+    "explorer": {
+      "description": "Windows File Explorer",
+      "windows_command": ["explorer.exe"]
+    }
+  }
+}

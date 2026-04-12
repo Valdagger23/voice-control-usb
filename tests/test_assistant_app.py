@@ -63,6 +63,18 @@ class AssistantAppTests(unittest.TestCase):
             self.assertEqual(report_result, "Current sheet: Sheet2 (workbook: context.xlsx)")
             self.assertEqual(save_result, "Saved workbook: context.xlsx")
 
+    def test_app_handles_desktop_commands_without_changing_proposal_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path)
+
+            safe_result = app.handle_text("open app notepad")
+            risky_result = app.handle_text("shutdown")
+
+            self.assertEqual(safe_result, "Opened app alias: notepad (stub)")
+            self.assertEqual(risky_result, "Desktop action is not approved in MVP: shutdown")
+            self.assertFalse(proposal_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
