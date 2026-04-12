@@ -1,0 +1,5 @@
+model = "gpt-5.3-codex"
+reasoning_effort = "high"
+
+[sandbox]
+mode = "workspace-write"
