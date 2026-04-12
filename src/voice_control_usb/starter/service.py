@@ -27,6 +27,7 @@ class LaunchSpec:
 
     usb_root: Path
     cwd: Path
+    executable_path: Path
     command: tuple[str, ...]
     env_overrides: dict[str, str]
 
@@ -132,7 +133,16 @@ class TrustedUsbStarter:
             )
 
         volume = trusted_volumes[0]
-        spec = self.build_launch_spec(volume)
+        try:
+            spec = self.build_launch_spec(volume)
+        except FileNotFoundError as error:
+            return self._record(
+                StarterResult(
+                    launched=False,
+                    message=str(error),
+                    usb_root=volume.mount_path,
+                )
+            )
         self._running_process = self.launcher.launch(spec)
         self._running_usb_root = volume.mount_path
         return self._record(
@@ -177,22 +187,18 @@ class TrustedUsbStarter:
 
         usb_root = volume.mount_path.resolve()
         cwd = (usb_root / self.config.assistant_workdir).resolve()
-        pythonpath_root = (usb_root / self.config.assistant_pythonpath).resolve()
-        existing_pythonpath = os.environ.get("PYTHONPATH", "")
-        if existing_pythonpath:
-            pythonpath = os.pathsep.join([str(pythonpath_root), existing_pythonpath])
-        else:
-            pythonpath = str(pythonpath_root)
+        executable_path = (usb_root / self.config.assistant_relative_executable).resolve()
+        if not executable_path.is_file():
+            raise FileNotFoundError(
+                f"Packaged assistant executable not found on trusted USB: {executable_path}"
+            )
 
         return LaunchSpec(
             usb_root=usb_root,
             cwd=cwd,
-            command=(
-                self.config.assistant_python,
-                "-m",
-                self.config.assistant_module,
-            ),
-            env_overrides={"PYTHONPATH": pythonpath},
+            executable_path=executable_path,
+            command=(str(executable_path),),
+            env_overrides={},
         )
 
     def _clear_finished_process(self) -> None:

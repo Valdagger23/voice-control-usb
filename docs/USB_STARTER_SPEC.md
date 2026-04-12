@@ -21,9 +21,7 @@ Minimum required fields:
 
 Recommended fields:
 
-- `assistant_python`
-- `assistant_module`
-- `assistant_pythonpath`
+- `assistant_relative_executable`
 - `assistant_workdir`
 - `poll_interval_seconds`
 - `log_path`
@@ -34,9 +32,7 @@ Example:
 {
   "expected_volume_label": "VOICEBOT",
   "trust_marker": "voice-control-usb.trusted",
-  "assistant_python": "python",
-  "assistant_module": "voice_control_usb",
-  "assistant_pythonpath": "src",
+  "assistant_relative_executable": "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe",
   "assistant_workdir": ".",
   "poll_interval_seconds": 2.0,
   "log_path": "C:\\ProgramData\\voice-control-usb\\starter.log"
@@ -54,19 +50,18 @@ Example trusted layout:
 ```text
 E:\
   voice-control-usb.trusted
-  src\
-  docs\
-  ...
+  dist\
+    voice-control-usb-assistant\
+      voice-control-usb-assistant.exe
 ```
 
 If either the label or marker check fails, the starter does not launch anything.
 
 ## Launch behavior
-When one trusted USB is detected, the starter builds a direct module launch:
+When one trusted USB is detected, the starter builds a direct executable launch:
 
-- command: `<assistant_python> -m <assistant_module>`
+- command: `<USB_ROOT>\<assistant_relative_executable>`
 - working directory: `<usb_root>/<assistant_workdir>`
-- `PYTHONPATH`: prepended with `<usb_root>/<assistant_pythonpath>`
 
 The launch path uses `subprocess.Popen(..., shell=False)` only.
 No arbitrary shell command execution is used.
@@ -92,8 +87,7 @@ The removable-drive watcher is Windows-only.
 Verify on a prepared Windows laptop with a configured USB:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m voice_control_usb.starter.cli --config C:\ProgramData\voice-control-usb\starter.json --once
+C:\Program Files\voice-control-usb\voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --once
 ```
 
 Expected outcomes:
@@ -110,6 +104,7 @@ WSL tests cover:
 - USB label and marker validation
 - duplicate-launch prevention
 - relaunch after process exit
+- packaged assistant path resolution
 
 WSL does not verify live removable-drive discovery on Windows.
 That part still requires native Windows testing.

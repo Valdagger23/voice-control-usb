@@ -13,9 +13,7 @@ class StarterConfig:
 
     expected_volume_label: str
     trust_marker: str = "voice-control-usb.trusted"
-    assistant_python: str = "python"
-    assistant_module: str = "voice_control_usb"
-    assistant_pythonpath: str = "src"
+    assistant_relative_executable: str = "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe"
     assistant_workdir: str = "."
     poll_interval_seconds: float = 2.0
     log_path: Path | None = None
@@ -32,17 +30,14 @@ class StarterConfig:
         if not trust_marker:
             raise ValueError("trust_marker must not be empty.")
 
-        assistant_python = str(payload.get("assistant_python", "python")).strip()
-        if not assistant_python:
-            raise ValueError("assistant_python must not be empty.")
-
-        assistant_module = str(payload.get("assistant_module", "voice_control_usb")).strip()
-        if not assistant_module:
-            raise ValueError("assistant_module must not be empty.")
-
-        assistant_pythonpath = str(payload.get("assistant_pythonpath", "src")).strip()
-        if not assistant_pythonpath:
-            raise ValueError("assistant_pythonpath must not be empty.")
+        assistant_relative_executable = str(
+            payload.get(
+                "assistant_relative_executable",
+                "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe",
+            )
+        ).strip()
+        if not assistant_relative_executable:
+            raise ValueError("assistant_relative_executable must not be empty.")
 
         assistant_workdir = str(payload.get("assistant_workdir", ".")).strip()
         if not assistant_workdir:
@@ -58,9 +53,7 @@ class StarterConfig:
         return cls(
             expected_volume_label=expected_volume_label,
             trust_marker=trust_marker,
-            assistant_python=assistant_python,
-            assistant_module=assistant_module,
-            assistant_pythonpath=assistant_pythonpath,
+            assistant_relative_executable=assistant_relative_executable,
             assistant_workdir=assistant_workdir,
             poll_interval_seconds=poll_interval_seconds,
             log_path=log_path,
