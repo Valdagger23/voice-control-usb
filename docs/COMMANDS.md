@@ -8,6 +8,7 @@
 - Workbook and worksheet context are maintained within the active assistant process.
 - Session mode preserves that context across multiple commands in one runtime.
 - Speech session mode must feed recognized text into the same typed command handling path.
+- Push-to-talk speech mode must use explicit activation and the same post-transcription command path.
 
 ## Supported phase-1 commands
 

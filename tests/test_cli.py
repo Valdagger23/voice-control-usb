@@ -52,6 +52,23 @@ class CliTests(unittest.TestCase):
             ],
         )
 
+    def test_push_to_talk_session_mode_uses_enter_trigger(self) -> None:
+        input_stream = StringIO("\nopen excel\nquit\n")
+        output_stream = StringIO()
+
+        with patch("sys.stdin", input_stream), patch("sys.stdout", output_stream):
+            exit_code = cli.main(["--session", "--input-mode", "speech", "--speech-activation", "ptt"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            output_stream.getvalue().splitlines(),
+            [
+                "Recognized: open excel",
+                "Excel session ready (stub)",
+                "Session ended.",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

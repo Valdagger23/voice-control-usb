@@ -12,9 +12,15 @@ class SpeechTranscriber:
     def transcribe(self, audio_source: str | None = None) -> str:
         raise NotImplementedError
 
+    def requires_manual_transcript(self) -> bool:
+        return False
+
 
 class ManualTextSpeechTranscriber(SpeechTranscriber):
     """Stub provider that treats manual `record ...` input as recognized speech."""
+
+    def requires_manual_transcript(self) -> bool:
+        return True
 
     def transcribe(self, audio_source: str | None = None) -> str:
         normalized = "" if audio_source is None else audio_source.strip()

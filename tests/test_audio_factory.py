@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from voice_control_usb.audio.factory import create_speech_transcriber
+from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
+from voice_control_usb.audio.activation import EnterToTalkSpeechActivator, ManualRecordSpeechActivator
 from voice_control_usb.audio.transcriber import (
     ManualTextSpeechTranscriber,
     SpeechRecognitionTranscriber,
@@ -33,6 +34,20 @@ class SpeechFactoryTests(unittest.TestCase):
     def test_unknown_provider_fails_cleanly(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown speech provider selection"):
             create_speech_transcriber("mystery")
+
+    def test_manual_speech_activation_is_default(self) -> None:
+        activator = create_speech_activator()
+
+        self.assertIsInstance(activator, ManualRecordSpeechActivator)
+
+    def test_push_to_talk_activation_can_be_selected(self) -> None:
+        activator = create_speech_activator("ptt")
+
+        self.assertIsInstance(activator, EnterToTalkSpeechActivator)
+
+    def test_unknown_activation_fails_cleanly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown speech activation selection"):
+            create_speech_activator("mystery")
 
 
 class SpeechRecognitionTranscriberTests(unittest.TestCase):

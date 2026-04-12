@@ -34,6 +34,7 @@ Build the deterministic core:
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
+- Push-to-talk speech mode: `--session --input-mode speech --speech-activation ptt` uses Enter as the recording trigger in terminal sessions
 
 ## Local verification
 - `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
@@ -45,6 +46,7 @@ Build the deterministic core:
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "shutdown"`
 - `printf 'open workbook /tmp/context.xlsx\nselect sheet Sheet2\ngo to A123\ntype pass\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
 - `printf 'record open workbook /tmp/context.xlsx\nrecord select sheet Sheet2\nrecord go to A123\nrecord type pass\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech`
+- `printf '\nopen workbook /tmp/context.xlsx\n\nselect sheet Sheet2\n\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech --speech-activation ptt`
 
 ## Windows COM verification
 - `python -m pip install pywin32`
@@ -60,5 +62,7 @@ Build the deterministic core:
 - Controlled activation only for now: manual `record ...` lines in speech session mode
 - Default speech provider: stub/manual for WSL and tests
 - First real provider: `speech_recognition`
+- Speech activation modes: `manual` and `ptt`
 - Future providers plug in through `SpeechTranscriber` and `create_speech_transcriber`
+- Future triggers plug in through `SpeechActivator` and `create_speech_activator`
 - Details: [docs/SPEECH_INPUT.md](docs/SPEECH_INPUT.md)

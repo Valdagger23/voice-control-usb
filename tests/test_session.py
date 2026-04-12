@@ -9,6 +9,7 @@ import unittest
 
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
+from voice_control_usb.audio.activation import EnterToTalkSpeechActivator, ManualRecordSpeechActivator
 from voice_control_usb.audio.transcriber import ManualTextSpeechTranscriber
 from voice_control_usb.excel.adapter import StubExcelAdapter
 
@@ -89,6 +90,7 @@ class AssistantSessionTests(unittest.TestCase):
             result = run_speech_session(
                 app,
                 ManualTextSpeechTranscriber(),
+                ManualRecordSpeechActivator(),
                 input_stream,
                 output_stream,
             )
@@ -121,6 +123,7 @@ class AssistantSessionTests(unittest.TestCase):
             result = run_speech_session(
                 app,
                 ManualTextSpeechTranscriber(),
+                ManualRecordSpeechActivator(),
                 input_stream,
                 output_stream,
             )
@@ -151,6 +154,7 @@ class AssistantSessionTests(unittest.TestCase):
             result = run_speech_session(
                 app,
                 FailingTranscriber(),
+                ManualRecordSpeechActivator(),
                 input_stream,
                 output_stream,
             )
@@ -160,6 +164,52 @@ class AssistantSessionTests(unittest.TestCase):
                 output_stream.getvalue().splitlines(),
                 [
                     "Speech input unavailable: microphone backend missing",
+                    "Session ended.",
+                ],
+            )
+
+    def test_push_to_talk_session_routes_stub_transcript_through_same_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            app = AssistantApp(proposal_path=proposal_path, excel=StubExcelAdapter())
+            input_stream = StringIO(
+                "\n".join(
+                    [
+                        "",
+                        "open workbook /tmp/context.xlsx",
+                        "",
+                        "select sheet Sheet2",
+                        "",
+                        "go to A123",
+                        "",
+                        "type pass",
+                        "quit",
+                    ]
+                )
+                + "\n"
+            )
+            output_stream = StringIO()
+
+            result = run_speech_session(
+                app,
+                ManualTextSpeechTranscriber(),
+                EnterToTalkSpeechActivator(),
+                input_stream,
+                output_stream,
+            )
+
+            self.assertEqual(result.processed_commands, 4)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "Recognized: open workbook /tmp/context.xlsx",
+                    "Opened workbook: context.xlsx",
+                    "Recognized: select sheet Sheet2",
+                    "Selected sheet: Sheet2",
+                    "Recognized: go to A123",
+                    "Moved to A123",
+                    "Recognized: type pass",
+                    "Typed 'pass' into A123",
                     "Session ended.",
                 ],
             )

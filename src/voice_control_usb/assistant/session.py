@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.audio.activation import SpeechActivator
 from voice_control_usb.audio.transcriber import SpeechTranscriber
 
 SESSION_EXIT_COMMANDS = {"exit", "quit"}
@@ -55,40 +56,35 @@ def run_session(
 def run_speech_session(
     app: AssistantApp,
     transcriber: SpeechTranscriber,
+    activator: SpeechActivator,
     input_stream: TextIO,
     output_stream: TextIO,
-    *,
-    prompt: str = "voice-control-usb speech> ",
 ) -> SessionResult:
-    """Process manually activated speech input through the same assistant pipeline."""
+    """Process controlled speech input through the same assistant pipeline."""
 
     processed = 0
     interactive = _is_interactive(input_stream, output_stream)
 
     while True:
         if interactive:
-            output_stream.write(prompt)
+            output_stream.write(activator.prompt)
             output_stream.flush()
 
-        raw_line = input_stream.readline()
-        if raw_line == "":
-            if interactive:
-                output_stream.write("\n")
+        activation = activator.next_activation(
+            transcriber,
+            input_stream,
+            output_stream,
+            interactive=interactive,
+        )
+        if activation is None:
             break
-
-        activation = raw_line.strip()
-        if not activation:
-            continue
-        if _should_exit_session(activation, output_stream):
-            break
-
-        if not activation.casefold().startswith("record"):
-            output_stream.write("Speech mode expects 'record <utterance>' or 'quit'.\n")
+        if activation.should_exit:
+            output_stream.write("Session ended.\n")
             output_stream.flush()
-            continue
+            break
 
         try:
-            recognized = transcriber.transcribe(activation)
+            recognized = transcriber.transcribe(activation.payload)
         except (ImportError, RuntimeError) as error:
             output_stream.write(f"Speech input unavailable: {error}\n")
             output_stream.flush()
