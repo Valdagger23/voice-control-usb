@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.excel.adapter import StubExcelAdapter
 
 
 class AssistantAppTests(unittest.TestCase):
@@ -33,6 +34,18 @@ class AssistantAppTests(unittest.TestCase):
 
             self.assertEqual(result, "Excel session ready (stub)")
             self.assertFalse(proposal_path.exists())
+
+    def test_app_uses_injected_excel_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            excel = StubExcelAdapter()
+            app = AssistantApp(proposal_path=proposal_path, excel=excel)
+
+            app.handle_text("go to C7")
+            result = app.handle_text("type pass")
+
+            self.assertEqual(result, "Typed 'pass' into C7")
+            self.assertEqual(excel.cells["C7"], "pass")
 
 
 if __name__ == "__main__":
