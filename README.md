@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 2 basic Excel vertical-slice implementation is complete on top of the approved Phase 1 capability core.
+Phase 3 controlled push-to-talk speech is complete on top of the native Excel vertical slice.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
-- Basic Excel control now works through a visible typed Windows shell and native COM adapter.
+- Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
 - Media/Spotify, browser/Google, and Discord capabilities follow after Excel is proven on Windows.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is controlled push-to-talk speech in front of the same command pipeline.
+- The next implementation phase is Windows media and Spotify control.
 
 Planning documents:
 
@@ -22,6 +22,7 @@ Planning documents:
 - [Phase 0 baseline](docs/PHASE_0_BASELINE.md)
 - [Phase 1 baseline](docs/PHASE_1_BASELINE.md)
 - [Phase 2 baseline](docs/PHASE_2_BASELINE.md)
+- [Phase 3 baseline](docs/PHASE_3_BASELINE.md)
 
 ## Existing prototype
 
@@ -51,6 +52,15 @@ Phase 2 additionally provides:
 - four-way cell navigation and worksheet-boundary checks
 - one-level undo for the most recent assistant-made cell edit
 - clear missing-workbook, protected-sheet, invalid-cell, and lost-session failures
+
+Phase 3 additionally provides:
+
+- offline Windows SAPI recognition through the installed pywin32 dependency
+- a non-blocking `Push to talk` button and microphone selector
+- raw transcript, visible normalized interpretation, and execution status
+- deterministic silence, ambiguity, unsupported-phrase, and provider-failure handling
+- audit events for speech input that is rejected before command parsing
+- typed input retained alongside speech for testing and accessibility
 
 ## Development environment
 - Active repository: `D:\VoiceControl`
@@ -88,7 +98,7 @@ py -3 -m venv .venv
 - Details: [docs/DESKTOP_ACTIONS.md](docs/DESKTOP_ACTIONS.md)
 
 ## Runtime modes
-- Visible Windows mode: `--window` opens the typed assistant shell and selects native Excel COM by default on Windows
+- Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native Excel COM and offline Windows speech by default
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
@@ -106,6 +116,7 @@ Windows baseline:
 
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
 - `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
+- `.\.venv\Scripts\python.exe scripts\verify_windows_speech.py`
 - `.\.venv\Scripts\python.exe -m voice_control_usb --window`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel"`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel and go to A1"`

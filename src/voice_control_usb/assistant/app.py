@@ -192,6 +192,25 @@ class AssistantApp:
         )
         return message
 
+    def record_input_outcome(
+        self,
+        *,
+        source_text: str,
+        outcome: AuditOutcome,
+        message: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        """Record an input-stage outcome that never became a command."""
+
+        self.audit.record(
+            AuditEvent.create(
+                source_text=source_text,
+                outcome=outcome,
+                message=message,
+                details=details,
+            )
+        )
+
     def _record_response(
         self,
         command: Command,

@@ -17,6 +17,8 @@ class AuditOutcome(str, Enum):
     CANCELED = "canceled"
     UNSUPPORTED = "unsupported"
     STATUS = "status"
+    INPUT_REJECTED = "input_rejected"
+    INPUT_FAILED = "input_failed"
 
 
 @dataclass(frozen=True, slots=True)

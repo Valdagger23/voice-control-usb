@@ -57,8 +57,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--speech-provider",
-        default=os.environ.get("VOICE_CONTROL_USB_SPEECH_PROVIDER", "stub"),
+        default=os.environ.get("VOICE_CONTROL_USB_SPEECH_PROVIDER", "auto"),
         help="Select the speech transcriber provider for speech session mode.",
+    )
+    parser.add_argument(
+        "--microphone",
+        default=os.environ.get("VOICE_CONTROL_USB_MICROPHONE"),
+        help="Select a microphone by its exact Windows device name.",
     )
     parser.add_argument(
         "--speech-activation",
@@ -84,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not raw_args:
         print(
-            'Usage: python -m voice_control_usb [--excel-adapter stub|com] [--session] "open excel"'
+            "Usage: python -m voice_control_usb --window, --session, or <command>"
         )
         return 1
 
@@ -99,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("speech input mode requires --session")
 
     excel_selection = namespace.excel_adapter
+    speech_selection = namespace.speech_provider
     if (
         namespace.window
         and not any(
@@ -109,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         and sys.platform == "win32"
     ):
         excel_selection = "com"
+    if speech_selection == "auto":
+        speech_selection = "windows_sapi" if sys.platform == "win32" else "stub"
 
     try:
         runtime_paths = AssistantRuntimePaths.from_cli(
@@ -142,14 +150,21 @@ def main(argv: list[str] | None = None) -> int:
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
         if namespace.window:
-            run_windows_shell(app)
+            try:
+                transcriber = create_speech_transcriber(speech_selection)
+                transcriber.select_input_device(namespace.microphone)
+            except (ImportError, RuntimeError, ValueError) as error:
+                print(f"Assistant startup failed: {error}")
+                return 2
+            run_windows_shell(app, transcriber)
             return 0
         if namespace.session:
             if namespace.input_mode == "speech":
                 try:
-                    transcriber = create_speech_transcriber(namespace.speech_provider)
+                    transcriber = create_speech_transcriber(speech_selection)
+                    transcriber.select_input_device(namespace.microphone)
                     activator = create_speech_activator(namespace.speech_activation)
-                except ValueError as error:
+                except (ImportError, RuntimeError, ValueError) as error:
                     print(str(error))
                     return 2
                 run_speech_session(app, transcriber, activator, sys.stdin, sys.stdout)

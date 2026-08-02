@@ -3,7 +3,37 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
+
+
+class TranscriptionStatus(str, Enum):
+    """Deterministic outcome of one controlled speech capture."""
+
+    RECOGNIZED = "recognized"
+    SILENCE = "silence"
+    AMBIGUOUS = "ambiguous"
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptionResult:
+    """Structured speech result used before command parsing."""
+
+    status: TranscriptionStatus
+    text: str = ""
+    confidence: float | None = None
+    alternatives: tuple[str, ...] = ()
+
+
+def non_executed_transcription_message(result: TranscriptionResult) -> str:
+    """Return the visible explanation for a speech result that must not execute."""
+
+    if result.status is TranscriptionStatus.SILENCE:
+        return "No speech recognized."
+    if result.status is TranscriptionStatus.AMBIGUOUS:
+        candidate = f" Best match: {result.text}." if result.text else ""
+        return f"Speech was unclear and was not executed.{candidate}"
+    raise ValueError("A recognized transcription does not have a rejection message.")
 
 
 class SpeechTranscriber:
@@ -12,8 +42,21 @@ class SpeechTranscriber:
     def transcribe(self, audio_source: str | None = None) -> str:
         raise NotImplementedError
 
+    def transcribe_result(self, audio_source: str | None = None) -> TranscriptionResult:
+        text = self.transcribe(audio_source).strip()
+        if not text:
+            return TranscriptionResult(status=TranscriptionStatus.SILENCE)
+        return TranscriptionResult(status=TranscriptionStatus.RECOGNIZED, text=text)
+
     def requires_manual_transcript(self) -> bool:
         return False
+
+    def available_input_devices(self) -> tuple[str, ...]:
+        return ()
+
+    def select_input_device(self, name: str | None) -> None:
+        if name:
+            raise ValueError("This speech provider does not support microphone selection.")
 
 
 class ManualTextSpeechTranscriber(SpeechTranscriber):

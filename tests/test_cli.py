@@ -41,7 +41,9 @@ class CliTests(unittest.TestCase):
         output_stream = StringIO()
 
         with patch("sys.stdin", input_stream), patch("sys.stdout", output_stream):
-            exit_code = cli.main(["--session", "--input-mode", "speech"])
+            exit_code = cli.main(
+                ["--session", "--input-mode", "speech", "--speech-provider", "stub"]
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(
@@ -71,7 +73,17 @@ class CliTests(unittest.TestCase):
         output_stream = StringIO()
 
         with patch("sys.stdin", input_stream), patch("sys.stdout", output_stream):
-            exit_code = cli.main(["--session", "--input-mode", "speech", "--speech-activation", "ptt"])
+            exit_code = cli.main(
+                [
+                    "--session",
+                    "--input-mode",
+                    "speech",
+                    "--speech-activation",
+                    "ptt",
+                    "--speech-provider",
+                    "stub",
+                ]
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(
@@ -85,13 +97,25 @@ class CliTests(unittest.TestCase):
 
     def test_window_mode_runs_visible_shell_with_shared_app(self) -> None:
         with patch("voice_control_usb.assistant.cli.run_windows_shell") as run_window:
-            exit_code = cli.main(["--window", "--excel-adapter", "stub"])
+            exit_code = cli.main(
+                [
+                    "--window",
+                    "--excel-adapter",
+                    "stub",
+                    "--speech-provider",
+                    "stub",
+                ]
+            )
 
         self.assertEqual(exit_code, 0)
         run_window.assert_called_once()
         self.assertEqual(
             run_window.call_args.args[0].executor.excel.__class__.__name__,
             "StubExcelAdapter",
+        )
+        self.assertEqual(
+            run_window.call_args.args[1].__class__.__name__,
+            "ManualTextSpeechTranscriber",
         )
 
 

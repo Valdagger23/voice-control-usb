@@ -10,7 +10,11 @@ import unittest
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.audio.activation import EnterToTalkSpeechActivator, ManualRecordSpeechActivator
-from voice_control_usb.audio.transcriber import ManualTextSpeechTranscriber
+from voice_control_usb.audio.transcriber import (
+    ManualTextSpeechTranscriber,
+    TranscriptionResult,
+    TranscriptionStatus,
+)
 from voice_control_usb.excel.adapter import StubExcelAdapter
 
 
@@ -267,6 +271,43 @@ class AssistantSessionTests(unittest.TestCase):
                     "Moved to A123",
                     "Recognized: type pass",
                     "Typed 'pass' into A123",
+                    "Session ended.",
+                ],
+            )
+
+    def test_speech_session_rejects_ambiguous_transcript_without_execution(self) -> None:
+        class AmbiguousTranscriber(ManualTextSpeechTranscriber):
+            def transcribe_result(
+                self,
+                audio_source: str | None = None,
+            ) -> TranscriptionResult:
+                return TranscriptionResult(
+                    status=TranscriptionStatus.AMBIGUOUS,
+                    text="open excel",
+                )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel = StubExcelAdapter()
+            app = AssistantApp(
+                proposal_path=Path(tmp_dir) / "unsupported_commands.jsonl",
+                excel=excel,
+            )
+            output_stream = StringIO()
+
+            result = run_speech_session(
+                app,
+                AmbiguousTranscriber(),
+                ManualRecordSpeechActivator(),
+                StringIO("record\nquit\n"),
+                output_stream,
+            )
+
+            self.assertEqual(result.processed_commands, 0)
+            self.assertFalse(excel.opened)
+            self.assertEqual(
+                output_stream.getvalue().splitlines(),
+                [
+                    "Speech was unclear and was not executed. Best match: open excel.",
                     "Session ended.",
                 ],
             )

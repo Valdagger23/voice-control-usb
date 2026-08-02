@@ -50,6 +50,8 @@ Exit: a user completes and saves a row-entry workflow through the visible assist
 
 Goal: place controlled speech in front of the same typed-command pipeline.
 
+Status: complete on the `agent/phase-3-push-to-talk-speech` branch.
+
 - Implement microphone selection and push-to-talk activation.
 - Integrate the chosen local/offline transcription provider by default.
 - Show transcript, interpretation, execution state, and errors.

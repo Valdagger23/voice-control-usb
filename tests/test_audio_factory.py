@@ -11,7 +11,10 @@ from voice_control_usb.audio.activation import EnterToTalkSpeechActivator, Manua
 from voice_control_usb.audio.transcriber import (
     ManualTextSpeechTranscriber,
     SpeechRecognitionTranscriber,
+    TranscriptionResult,
+    TranscriptionStatus,
 )
+from voice_control_usb.audio.windows_sapi import WindowsSapiSpeechTranscriber
 
 
 class SpeechFactoryTests(unittest.TestCase):
@@ -30,6 +33,20 @@ class SpeechFactoryTests(unittest.TestCase):
             transcriber = create_speech_transcriber("speech_recognition")
 
         self.assertIsInstance(transcriber, SpeechRecognitionTranscriber)
+
+    def test_windows_sapi_provider_can_be_selected_on_windows(self) -> None:
+        with patch("voice_control_usb.audio.factory.sys.platform", "win32"), patch(
+            "importlib.util.find_spec",
+            return_value=SimpleNamespace(),
+        ):
+            transcriber = create_speech_transcriber("windows_sapi")
+
+        self.assertIsInstance(transcriber, WindowsSapiSpeechTranscriber)
+
+    def test_windows_sapi_provider_is_platform_guarded(self) -> None:
+        with patch("voice_control_usb.audio.factory.sys.platform", "linux"):
+            with self.assertRaisesRegex(RuntimeError, "only available on Windows"):
+                create_speech_transcriber("windows_sapi")
 
     def test_unknown_provider_fails_cleanly(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown speech provider selection"):
@@ -76,6 +93,56 @@ class SpeechRecognitionTranscriberTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "duration must be greater than zero"):
             transcriber._parse_phrase_time_limit("record 0")
+
+
+class WindowsSapiSpeechTranscriberTests(unittest.TestCase):
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def available_input_devices(self) -> tuple[str, ...]:
+            return ("Microphone A", "Microphone B")
+
+        def recognize(self, **kwargs: object) -> TranscriptionResult:
+            self.calls.append(dict(kwargs))
+            return TranscriptionResult(
+                status=TranscriptionStatus.RECOGNIZED,
+                text="open excel",
+                confidence=0.8,
+            )
+
+    def test_provider_returns_structured_offline_result(self) -> None:
+        backend = self.FakeBackend()
+        transcriber = WindowsSapiSpeechTranscriber(
+            capture_timeout_seconds=6.0,
+            backend=backend,  # type: ignore[arg-type]
+        )
+        transcriber.select_input_device("Microphone B")
+
+        result = transcriber.transcribe_result("record 4")
+
+        self.assertIs(result.status, TranscriptionStatus.RECOGNIZED)
+        self.assertEqual(result.text, "open excel")
+        self.assertEqual(
+            backend.calls,
+            [{"timeout_seconds": 4.0, "device_name": "Microphone B"}],
+        )
+
+    def test_provider_rejects_unknown_microphone(self) -> None:
+        transcriber = WindowsSapiSpeechTranscriber(
+            backend=self.FakeBackend(),  # type: ignore[arg-type]
+        )
+
+        with self.assertRaisesRegex(ValueError, "Microphone input not found"):
+            transcriber.select_input_device("Missing microphone")
+
+    def test_provider_rejects_nonpositive_capture_duration(self) -> None:
+        transcriber = WindowsSapiSpeechTranscriber(
+            backend=self.FakeBackend(),  # type: ignore[arg-type]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "duration must be greater than zero"):
+            transcriber.transcribe_result("record 0")
 
 
 if __name__ == "__main__":

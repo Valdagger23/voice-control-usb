@@ -4,9 +4,9 @@
 This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-Phase 2 basic Excel vertical-slice implementation is complete. The native Windows shell and COM adapter now support deterministic cell reporting, typed and numeric entry, four-way navigation, one-level assistant edit undo, and safe failure handling. Phase 3 push-to-talk speech is next.
+Phase 3 controlled push-to-talk speech is complete. The visible Windows shell now uses the offline Windows SAPI recognizer by default, exposes microphone selection, shows raw transcripts and changed interpretations, and prevents silence or ambiguous speech from executing. Phase 4 media and Spotify control is next.
 
-Do not broaden implementation scope beyond controlled push-to-talk speech until the Phase 3 Excel speech workflow works on native Windows.
+Do not broaden implementation scope beyond media and Spotify until the Phase 4 playback workflow works on native Windows.
 
 ## Primary goal
 Build a reliable modular system with these layers:
