@@ -123,10 +123,9 @@ class WindowsSapiSpeechTranscriberTests(unittest.TestCase):
 
         self.assertIs(result.status, TranscriptionStatus.RECOGNIZED)
         self.assertEqual(result.text, "open excel")
-        self.assertEqual(
-            backend.calls,
-            [{"timeout_seconds": 4.0, "device_name": "Microphone B"}],
-        )
+        self.assertEqual(backend.calls[0]["timeout_seconds"], 4.0)
+        self.assertEqual(backend.calls[0]["device_name"], "Microphone B")
+        self.assertTrue(callable(backend.calls[0]["stop_requested"]))
 
     def test_provider_rejects_unknown_microphone(self) -> None:
         transcriber = WindowsSapiSpeechTranscriber(
@@ -143,6 +142,28 @@ class WindowsSapiSpeechTranscriberTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "duration must be greater than zero"):
             transcriber.transcribe_result("record 0")
+
+    def test_prepared_capture_preserves_an_immediate_stop_request(self) -> None:
+        class StopAwareBackend(self.FakeBackend):
+            def recognize(self, **kwargs: object) -> TranscriptionResult:
+                self.calls.append(dict(kwargs))
+                stop_requested = kwargs["stop_requested"]
+                if callable(stop_requested) and stop_requested():
+                    return TranscriptionResult(status=TranscriptionStatus.SILENCE)
+                return TranscriptionResult(
+                    status=TranscriptionStatus.RECOGNIZED,
+                    text="open excel",
+                )
+
+        transcriber = WindowsSapiSpeechTranscriber(
+            backend=StopAwareBackend(),  # type: ignore[arg-type]
+        )
+        transcriber.prepare_capture()
+        transcriber.stop_capture()
+
+        result = transcriber.transcribe_result("record")
+
+        self.assertIs(result.status, TranscriptionStatus.SILENCE)
 
 
 if __name__ == "__main__":

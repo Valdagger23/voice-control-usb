@@ -29,6 +29,8 @@ $starterName = "voice-control-usb-starter"
     --collect-all playwright `
     --hidden-import pycaw.pycaw `
     --collect-all uiautomation `
+    --collect-all pynput `
+    --collect-all pystray `
     --hidden-import win32com.client `
     --hidden-import winrt.windows.media.control `
     src\voice_control_usb\__main__.py

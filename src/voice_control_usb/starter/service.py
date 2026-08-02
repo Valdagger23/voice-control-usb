@@ -274,6 +274,7 @@ class TrustedUsbStarter:
             command=(
                 str(executable_path),
                 "--window",
+                "--start-minimized",
                 "--usb-root",
                 str(usb_root),
                 "--runtime-dir",

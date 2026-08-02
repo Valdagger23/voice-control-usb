@@ -4,6 +4,8 @@
 
 The laptop-resident starter has a narrow role: enumerate removable drives, validate a host-pinned USB identity, verify a signed application release, prevent duplicate launch, start the visible assistant without a shell, coordinate safe shutdown, and activate only fully verified updates. It performs no assistant automation and does not use USB autorun.
 
+Windows blocks arbitrary applications from silently running when an unfamiliar removable drive is inserted. Therefore each Windows host needs the trusted starter installed once. The installation script registers the watcher at logon and starts it immediately. PCs without that starter can still run the signed assistant manually, but the USB cannot safely force automatic execution.
+
 ## Trust checks
 
 A payload can launch only when all checks pass:
@@ -25,10 +27,10 @@ Any missing, malformed, escaped, altered, ambiguous, or unverifiable path fails 
 The starter resolves every path from the drive root returned by the current Windows scan. The launch is direct and uses `shell=False`:
 
 ```text
-<SIGNED_ENTRYPOINT> --window --usb-root <USB_ROOT> --runtime-dir <USB_ROOT>\runtime
+<SIGNED_ENTRYPOINT> --window --start-minimized --usb-root <USB_ROOT> --runtime-dir <USB_ROOT>\runtime
 ```
 
-No fixed drive letter is stored. Runtime and environment paths are explicit.
+No fixed drive letter is stored. Runtime and environment paths are explicit. A successful automatic launch creates the branded notification-area icon; its default action restores the Voice Control window. Closing the window hides it back to the notification area, while `Exit Voice Control` or safe USB removal ends the process.
 
 ## Duplicate protection and recovery
 

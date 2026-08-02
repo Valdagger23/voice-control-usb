@@ -10,6 +10,8 @@ The planned Phase 0-7 roadmap is complete. Voice Control now combines 158 visibl
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
 - The dark command console lists every supported phrase and includes a collapsible routine builder.
 - Users can create routines, drag commands into a left-to-right sequence, edit or reorder steps, and start the saved chain by name.
+- Prepared Windows hosts launch the trusted USB assistant into a branded notification-area icon; clicking it opens the command console.
+- A persistent global keyboard key or mouse button can be assigned to hold-to-talk or toggle continuous listening.
 - Discord launch, allowlisted navigation, visible drafts, and inspected device state now use Windows accessibility without user tokens or self-bot APIs.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
 - Signed immutable releases, host-pinned USB identity, duplicate protection, safe removal, staged updates, and recovery are implemented and verified on the physical D: removable drive.
@@ -131,6 +133,8 @@ py -3 -m venv .venv
 - The starter passes `--window`, `--usb-root`, and `--runtime-dir` explicitly to the packaged assistant
 - Duplicate launches are prevented by watcher tracking, pre-launch lock inspection, and the assistant's atomic runtime lock
 - `--prepare-removal` cooperatively closes the assistant and waits for lock cleanup
+- the one-time host starter install is required because Windows does not permit arbitrary USB software to auto-run on an unfamiliar PC
+- once installed, the starter begins watching immediately and at future logons; a verified USB launch starts minimized in the notification area
 - `--activate-update` verifies before and after staging, then atomically switches the active release; `--recover` repairs the pointer from verified releases
 - Details: [docs/USB_STARTER_SPEC.md](docs/USB_STARTER_SPEC.md)
 - Packaging details: [docs/DEPLOYMENT_PACKAGING.md](docs/DEPLOYMENT_PACKAGING.md)
@@ -156,7 +160,8 @@ py -3 -m venv .venv
 - Details and commands: [docs/MEDIA_SPOTIFY.md](docs/MEDIA_SPOTIFY.md)
 
 ## Runtime modes
-- Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native desktop, Excel COM, media, browser, Discord, and offline Windows speech adapters by default
+- Visible Windows mode: `--window` opens typed and voice input, selecting native desktop, Excel COM, media, browser, Discord, and offline Windows speech adapters by default
+- Tray mode: `--window --start-minimized` starts in the notification area; closing the console hides it there instead of ending the assistant
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
@@ -230,7 +235,9 @@ WSL baseline, when the USB filesystem is mounted:
 - Speech session mode is available with `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 
 ## Speech input
-- Controlled activation only for now: manual `record ...` lines in speech session mode
+- The window's `CONTROL` button assigns any single keyboard key or mouse button globally
+- `PUSH TO TALK` listens while that input is held; `TOGGLE LISTENING` starts and stops an explicit continuous command loop
+- Bindings persist in `runtime/global-controls.json`; they do not suppress the chosen input in other applications
 - Default speech provider: stub/manual for WSL and tests
 - First real provider: `speech_recognition`
 - Speech activation modes: `manual` and `ptt`

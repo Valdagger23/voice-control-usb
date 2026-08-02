@@ -86,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Open the visible Windows assistant window with typed input.",
     )
     parser.add_argument(
+        "--start-minimized",
+        action="store_true",
+        help="Start window mode in the Windows notification area when available.",
+    )
+    parser.add_argument(
         "--input-mode",
         default=os.environ.get("VOICE_CONTROL_USB_INPUT_MODE", "typed"),
         choices=("typed", "speech"),
@@ -159,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("one-shot mode requires a command, or use --session or --window")
     if namespace.window and namespace.command:
         parser.error("window mode does not accept a one-shot command")
+    if namespace.start_minimized and not namespace.window:
+        parser.error("--start-minimized requires --window")
     if namespace.input_mode == "speech" and not namespace.session:
         parser.error("speech input mode requires --session")
     if spotify_mode and (namespace.session or namespace.window or namespace.command):
@@ -287,7 +294,13 @@ def main(argv: list[str] | None = None) -> int:
             except (ImportError, RuntimeError, ValueError) as error:
                 print(f"Assistant startup failed: {error}")
                 return 2
-            run_windows_shell(app, transcriber, shutdown_monitor.requested)
+            run_windows_shell(
+                app,
+                transcriber,
+                shutdown_monitor.requested,
+                global_controls_path=runtime_paths.global_controls_path,
+                start_minimized=namespace.start_minimized,
+            )
             return 0
         if namespace.session:
             if namespace.input_mode == "speech":

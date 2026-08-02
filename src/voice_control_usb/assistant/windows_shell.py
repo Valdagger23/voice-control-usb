@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from queue import Empty, SimpleQueue
 from threading import Thread
 from typing import Callable
@@ -15,6 +16,15 @@ from voice_control_usb.assistant.speech_flow import (
     dispatch_transcription,
     record_speech_failure,
 )
+from voice_control_usb.assistant.global_controls import (
+    GlobalControlConfig,
+    GlobalControlStore,
+    GlobalInputController,
+    PUSH_TO_TALK,
+    TOGGLE_LISTENING,
+    mode_label,
+)
+from voice_control_usb.assistant.tray import TrayController, create_brand_icon
 from voice_control_usb.audio.transcriber import (
     SpeechTranscriber,
     TranscriptionResult,
@@ -51,6 +61,9 @@ def run_windows_shell(
     app: AssistantApp,
     transcriber: SpeechTranscriber,
     shutdown_requested: Callable[[], bool] | None = None,
+    *,
+    global_controls_path: Path | None = None,
+    start_minimized: bool = False,
 ) -> None:
     """Run the visible command deck and push-to-talk assistant window."""
 
@@ -86,6 +99,27 @@ def run_windows_shell(
     root.option_add("*TCombobox*Listbox.selectBackground", colors["cyan"])
     root.option_add("*TCombobox*Listbox.selectForeground", colors["window"])
     _enable_dark_title_bar(root)
+    try:
+        from PIL import ImageTk
+
+        window_icon = ImageTk.PhotoImage(create_brand_icon(64))
+        root.iconphoto(True, window_icon)
+    except (ImportError, OSError, RuntimeError):
+        window_icon = None
+
+    startup_messages: list[str] = []
+    global_control_store = GlobalControlStore(global_controls_path)
+    try:
+        global_control_config = global_control_store.load()
+    except RuntimeError as error:
+        global_control_config = GlobalControlConfig()
+        startup_messages.append(str(error))
+    active_global_config = [global_control_config]
+    global_control_summary = tk.StringVar()
+    input_controller: list[GlobalInputController | None] = [None]
+    tray_controller: list[TrayController | None] = [None]
+    tray_available = [False]
+    closing = [False]
 
     style = ttk.Style(root)
     style.theme_use("clam")
@@ -686,6 +720,13 @@ def run_windows_shell(
     )
     control_card.grid(row=3, column=0, sticky="ew", pady=(14, 0))
     control_card.grid_columnconfigure(1, weight=1)
+
+    def refresh_global_control_summary() -> None:
+        config = active_global_config[0]
+        state = config.display if config.enabled else "OFF"
+        global_control_summary.set(f"CONTROL  {state}")
+
+    refresh_global_control_summary()
     tk.Label(
         control_card,
         text="MIC",
@@ -710,6 +751,22 @@ def run_windows_shell(
     microphone_picker.grid(
         row=0, column=1, columnspan=2, sticky="ew", padx=(0, 16), pady=(10, 5)
     )
+    global_control_button = tk.Button(
+        control_card,
+        textvariable=global_control_summary,
+        command=lambda: open_global_control_settings(),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["pink"],
+        activeforeground=colors["text"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+        pady=8,
+    )
+    global_control_button.grid(row=0, column=3, sticky="e", padx=(0, 16), pady=(10, 5))
 
     command_entry = tk.Entry(
         control_card,
@@ -727,6 +784,9 @@ def run_windows_shell(
     command_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(16, 8), pady=(7, 14), ipady=11)
 
     speech_results: SimpleQueue[TranscriptionResult | Exception] = SimpleQueue()
+    speech_active = [False]
+    continuous_listening = [False]
+    push_to_talk_held = [False]
 
     def set_status(message: str, tone: str = "ready") -> None:
         palettes = {
@@ -765,6 +825,8 @@ def run_windows_shell(
             else:
                 set_status("Ready")
         append_line("Assistant", response)
+        if command.casefold() == "stop listening":
+            stop_continuous_listening()
         refresh_routine_selector()
 
     def submit(_event: object | None = None) -> None:
@@ -775,7 +837,17 @@ def run_windows_shell(
         command_entry.delete(0, "end")
         execute_command(command, "You")
 
-    def capture_speech() -> None:
+    def capture_speech(repeat: bool = False) -> None:
+        if speech_active[0]:
+            return
+        if repeat and transcriber.requires_manual_transcript():
+            continuous_listening[0] = False
+            append_line(
+                "Assistant",
+                "Continuous listening requires a microphone speech provider.",
+            )
+            set_status("Speech unavailable", "error")
+            return
         selected_device = microphone.get()
         try:
             transcriber.select_input_device(
@@ -786,9 +858,23 @@ def run_windows_shell(
             set_status("Speech unavailable", "error")
             return
 
-        voice_button.configure(state="disabled", background=colors["faint"])
+        speech_active[0] = True
+        if continuous_listening[0]:
+            voice_button.configure(
+                state="normal",
+                text="STOP LISTENING",
+                background=colors["pink"],
+            )
+        else:
+            voice_button.configure(state="disabled", background=colors["faint"])
         command_entry.configure(state="disabled")
-        set_status("Listening - speak one command", "working")
+        listening_message = (
+            "Listening continuously - press control to stop"
+            if continuous_listening[0]
+            else "Listening - speak one command"
+        )
+        set_status(listening_message, "working")
+        transcriber.prepare_capture()
 
         def worker() -> None:
             try:
@@ -798,6 +884,58 @@ def run_windows_shell(
 
         Thread(target=worker, daemon=True, name="voice-control-speech").start()
 
+    def stop_continuous_listening() -> None:
+        continuous_listening[0] = False
+        push_to_talk_held[0] = False
+        transcriber.stop_capture()
+        voice_button.configure(text="PUSH TO TALK", background=colors["cyan"])
+        if not speech_active[0]:
+            voice_button.configure(state="normal")
+            command_entry.configure(state="normal")
+            set_status("Ready")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
+
+    def toggle_continuous_listening() -> None:
+        if continuous_listening[0]:
+            stop_continuous_listening()
+            append_line("Assistant", "Continuous listening stopped.")
+            return
+        if transcriber.requires_manual_transcript():
+            append_line(
+                "Assistant",
+                "Continuous listening requires a microphone speech provider.",
+            )
+            set_status("Speech unavailable", "error")
+            return
+        continuous_listening[0] = True
+        append_line("Assistant", "Continuous listening started.")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
+        capture_speech(repeat=True)
+
+    def voice_button_action() -> None:
+        if continuous_listening[0]:
+            stop_continuous_listening()
+        else:
+            capture_speech()
+
+    def global_activation_press() -> None:
+        config = active_global_config[0]
+        if config.mode == TOGGLE_LISTENING:
+            toggle_continuous_listening()
+            return
+        if speech_active[0] or push_to_talk_held[0]:
+            return
+        push_to_talk_held[0] = True
+        capture_speech()
+
+    def global_activation_release() -> None:
+        if active_global_config[0].mode != PUSH_TO_TALK or not push_to_talk_held[0]:
+            return
+        push_to_talk_held[0] = False
+        transcriber.stop_capture()
+
     def poll_speech_result() -> None:
         try:
             result = speech_results.get_nowait()
@@ -805,12 +943,11 @@ def run_windows_shell(
             root.after(100, poll_speech_result)
             return
 
-        voice_button.configure(state="normal", background=colors["cyan"])
-        command_entry.configure(state="normal")
-        command_entry.focus_set()
+        speech_active[0] = False
         if isinstance(result, Exception):
             append_line("Assistant", record_speech_failure(app, result))
             set_status("Speech unavailable", "error")
+            continuous_listening[0] = False
         else:
             set_status("Processing speech", "working")
             root.update_idletasks()
@@ -819,14 +956,35 @@ def run_windows_shell(
                 append_line("Voice", dispatch.transcript)
                 if dispatch.interpreted_text != dispatch.transcript:
                     append_line("Interpretation", dispatch.interpreted_text)
+                if dispatch.interpreted_text.casefold() == "stop listening":
+                    continuous_listening[0] = False
             append_line("Assistant", dispatch.message)
-            set_status("Ready")
+        if continuous_listening[0]:
+            voice_button.configure(
+                state="normal",
+                text="STOP LISTENING",
+                background=colors["pink"],
+            )
+            set_status("Listening continuously", "working")
+            root.after(180, lambda: capture_speech(repeat=True))
+        else:
+            voice_button.configure(
+                state="normal",
+                text="PUSH TO TALK",
+                background=colors["cyan"],
+            )
+            command_entry.configure(state="normal")
+            command_entry.focus_set()
+            if not isinstance(result, Exception):
+                set_status("Ready")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
         root.after(100, poll_speech_result)
 
     def poll_shutdown_request() -> None:
         if shutdown_requested is not None and shutdown_requested():
             set_status("Stopping safely for USB removal", "warning")
-            root.after(50, root.destroy)
+            root.after(50, close_app)
             return
         root.after(250, poll_shutdown_request)
 
@@ -848,7 +1006,7 @@ def run_windows_shell(
     voice_button = tk.Button(
         control_card,
         text="PUSH TO TALK",
-        command=capture_speech,
+        command=voice_button_action,
         background=colors["cyan"],
         activebackground="#6ED0FA",
         foreground=colors["window"],
@@ -861,6 +1019,211 @@ def run_windows_shell(
         padx=17,
     )
     voice_button.grid(row=1, column=3, sticky="nsew", padx=(0, 16), pady=(7, 14))
+
+    def open_global_control_settings() -> None:
+        config = active_global_config[0]
+        dialog = tk.Toplevel(root)
+        dialog.title("Voice Control // Global Input")
+        dialog_width = 500
+        dialog_height = 500
+        root.update_idletasks()
+        dialog_x = root.winfo_rootx() + max(0, (root.winfo_width() - dialog_width) // 2)
+        dialog_y = root.winfo_rooty() + max(0, (root.winfo_height() - dialog_height) // 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_x}+{dialog_y}")
+        dialog.resizable(False, False)
+        dialog.configure(background=colors["window"])
+        dialog.transient(root)
+        dialog.grab_set()
+        _enable_dark_title_bar(dialog)
+
+        body = tk.Frame(dialog, background=colors["window"])
+        body.pack(fill="both", expand=True, padx=24, pady=22)
+        tk.Label(
+            body,
+            text="GLOBAL VOICE CONTROL",
+            background=colors["window"],
+            foreground=colors["text"],
+            font=("Segoe UI Semibold", 18),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text="Assign one keyboard key or mouse button. It works while Voice Control is hidden.",
+            background=colors["window"],
+            foreground=colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=420,
+            anchor="w",
+        ).pack(fill="x", pady=(5, 18))
+
+        enabled = tk.BooleanVar(value=config.enabled)
+        tk.Checkbutton(
+            body,
+            text="ENABLE GLOBAL CONTROL",
+            variable=enabled,
+            background=colors["window"],
+            activebackground=colors["window"],
+            foreground=colors["teal"],
+            activeforeground=colors["teal"],
+            selectcolor=colors["card"],
+            font=("Consolas", 9, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 14))
+
+        tk.Label(
+            body,
+            text="ASSIGNED INPUT",
+            background=colors["window"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        binding_text = tk.StringVar(value=config.display)
+        binding = [config.input_type, config.code, config.display]
+        binding_card = tk.Label(
+            body,
+            textvariable=binding_text,
+            background=colors["card"],
+            foreground=colors["pink"],
+            font=("Consolas", 15, "bold"),
+            anchor="center",
+            pady=13,
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        binding_card.pack(fill="x", pady=(5, 8))
+        capture_status = tk.StringVar(value="")
+
+        def apply_capture(input_type: str, code: str, display: str) -> None:
+            if not dialog.winfo_exists():
+                return
+            binding[:] = [input_type, code, display]
+            binding_text.set(display)
+            capture_status.set("INPUT CAPTURED")
+
+        def capture_input() -> None:
+            controller = input_controller[0]
+            if controller is None:
+                capture_status.set("GLOBAL INPUT SERVICE IS UNAVAILABLE")
+                return
+            capture_status.set("PRESS ANY KEY OR MOUSE BUTTON...")
+            controller.capture_next(
+                lambda input_type, code, display: root.after(
+                    0,
+                    lambda: apply_capture(input_type, code, display),
+                )
+            )
+
+        tk.Button(
+            body,
+            text="CAPTURE KEY / MOUSE",
+            command=capture_input,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["cyan"],
+            activeforeground=colors["text"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            pady=9,
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            textvariable=capture_status,
+            background=colors["window"],
+            foreground=colors["amber"],
+            font=("Consolas", 8, "bold"),
+        ).pack(fill="x", pady=(5, 10))
+
+        tk.Label(
+            body,
+            text="ACTIVATION MODE",
+            background=colors["window"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        selected_mode = tk.StringVar(value=mode_label(config.mode))
+        mode_picker = ttk.Combobox(
+            body,
+            textvariable=selected_mode,
+            values=(mode_label(PUSH_TO_TALK), mode_label(TOGGLE_LISTENING)),
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        mode_picker.pack(fill="x", pady=(5, 16))
+
+        controls = tk.Frame(body, background=colors["window"])
+        controls.pack(fill="x", side="bottom")
+
+        def close_dialog() -> None:
+            if input_controller[0] is not None:
+                input_controller[0].cancel_capture()
+            dialog.grab_release()
+            dialog.destroy()
+
+        def save_control() -> None:
+            mode = (
+                PUSH_TO_TALK
+                if selected_mode.get() == mode_label(PUSH_TO_TALK)
+                else TOGGLE_LISTENING
+            )
+            try:
+                updated = global_control_store.save(
+                    GlobalControlConfig(
+                        enabled=enabled.get(),
+                        input_type=binding[0],
+                        code=binding[1],
+                        display=binding[2],
+                        mode=mode,
+                    )
+                )
+            except (OSError, RuntimeError, ValueError) as error:
+                capture_status.set(str(error).upper())
+                return
+            active_global_config[0] = updated
+            if input_controller[0] is not None:
+                input_controller[0].update(updated)
+            refresh_global_control_summary()
+            if tray_controller[0] is not None:
+                tray_controller[0].refresh()
+            append_line(
+                "Assistant",
+                f"Global control saved: {updated.display} / {mode_label(updated.mode)}.",
+            )
+            close_dialog()
+
+        tk.Button(
+            controls,
+            text="CANCEL",
+            command=close_dialog,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=9,
+        ).pack(side="left")
+        tk.Button(
+            controls,
+            text="SAVE CONTROL",
+            command=save_control,
+            background=colors["teal"],
+            activebackground="#4BE2BD",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=9,
+        ).pack(side="right")
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
 
     tk.Label(
         main,
@@ -1264,15 +1627,93 @@ def run_windows_shell(
         categories.grid_columnconfigure(index % 3, weight=1)
         category_buttons[name] = button
 
+    def show_window() -> None:
+        if closing[0]:
+            return
+        root.deiconify()
+        root.state("normal")
+        root.lift()
+        root.focus_force()
+        command_entry.focus_set()
+
+    def close_app() -> None:
+        if closing[0]:
+            return
+        closing[0] = True
+        continuous_listening[0] = False
+        transcriber.stop_capture()
+        if input_controller[0] is not None:
+            input_controller[0].stop()
+            input_controller[0] = None
+        if tray_controller[0] is not None:
+            tray_controller[0].stop()
+            tray_controller[0] = None
+        root.destroy()
+
+    def hide_window() -> None:
+        if tray_available[0]:
+            root.withdraw()
+        else:
+            close_app()
+
+    def tray_status_text() -> str:
+        if continuous_listening[0]:
+            return "Listening: ON"
+        config = active_global_config[0]
+        if not config.enabled:
+            return "Global control: OFF"
+        return f"{config.display} / {mode_label(config.mode)}"
+
+    controller = GlobalInputController(
+        active_global_config[0],
+        on_activation_press=lambda: root.after(0, global_activation_press),
+        on_activation_release=lambda: root.after(0, global_activation_release),
+    )
+    try:
+        controller.start()
+    except (ImportError, OSError, RuntimeError) as error:
+        startup_messages.append(f"Global input controls unavailable: {error}")
+    else:
+        input_controller[0] = controller
+
+    try:
+        tray = TrayController(
+            on_open=lambda: root.after(0, show_window),
+            on_exit=lambda: root.after(0, close_app),
+            status_text=tray_status_text,
+        )
+        tray.start()
+    except (ImportError, OSError, RuntimeError) as error:
+        startup_messages.append(f"Tray icon unavailable: {error}")
+    else:
+        tray_controller[0] = tray
+        tray_available[0] = True
+
+    root.protocol("WM_DELETE_WINDOW", hide_window)
     search_query.trace_add("write", render_legend)
     refresh_routine_selector()
     choose_category("All")
     append_line(
         "Assistant",
-        "Console online. Choose a command from the deck, type one below, or push to talk.",
+        "Console online. Choose a command from the deck, type one below, or use voice control.",
     )
+    for startup_message in startup_messages:
+        append_line("Assistant", startup_message)
     command_entry.bind("<Return>", submit)
     command_entry.focus_set()
     root.after(100, poll_speech_result)
     root.after(250, poll_shutdown_request)
-    root.mainloop()
+    if start_minimized and tray_available[0]:
+        root.withdraw()
+    elif start_minimized:
+        append_line(
+            "Assistant",
+            "The tray icon is unavailable, so the command window remained open.",
+        )
+    try:
+        root.mainloop()
+    finally:
+        if input_controller[0] is not None:
+            input_controller[0].stop()
+        if tray_controller[0] is not None:
+            tray_controller[0].stop()

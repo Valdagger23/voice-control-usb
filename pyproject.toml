@@ -16,6 +16,8 @@ windows = [
   "playwright>=1.62.0; platform_system=='Windows'",
   "uiautomation>=2.0.29; platform_system=='Windows'",
   "Pillow>=11.0; platform_system=='Windows'",
+  "pynput>=1.8.1; platform_system=='Windows'",
+  "pystray>=0.19.5; platform_system=='Windows'",
   "winrt-Windows.Foundation>=3.2.1; platform_system=='Windows'",
   "winrt-Windows.Foundation.Collections>=3.2.1; platform_system=='Windows'",
   "winrt-Windows.Media.Control>=3.2.1; platform_system=='Windows'",

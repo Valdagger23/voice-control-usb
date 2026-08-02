@@ -2,7 +2,7 @@
 
 ## Phase 3 outcome
 
-Speech input is a controlled boundary in front of the same deterministic command pipeline used by typed input. On native Windows, the visible assistant now provides a microphone selector and a `Push to talk` button. Each button press opens one limited capture cycle; there is no wake word, background listening, or continuous recording.
+Speech input is a controlled boundary in front of the same deterministic command pipeline used by typed input. On native Windows, the assistant provides a microphone selector, an on-screen `Push to talk` button, and one user-assigned global keyboard key or mouse button. There is no wake word or unattended activation.
 
 ## Default Windows provider
 
@@ -34,6 +34,19 @@ Then:
 2. Press `Push to talk`.
 3. Speak one supported command.
 4. Wait for the transcript, optional interpretation, and assistant response.
+
+## Global keyboard and mouse activation
+
+Select `CONTROL` beside the microphone picker, then:
+
+1. Select `CAPTURE KEY / MOUSE`.
+2. Press the keyboard key or mouse button you want to assign.
+3. Choose `PUSH TO TALK` or `TOGGLE LISTENING`.
+4. Enable global control and save.
+
+`PUSH TO TALK` starts capture on press and requests an early stop on release. `TOGGLE LISTENING` starts an explicit loop of bounded capture cycles; press the same input again, select `STOP LISTENING`, or say `stop listening` to end it. The global listener observes the selected input but does not block it from the foreground application.
+
+The setting is stored alongside the USB runtime in `global-controls.json`, so it follows the prepared Voice Control USB. The notification-area menu also shows the assigned input and current listening state.
 
 The UI remains responsive during capture. The button and typed command field are temporarily disabled so two commands cannot race each other. Typed input remains available after every capture.
 
@@ -99,7 +112,7 @@ Explicit provider examples:
 .\.venv\Scripts\python.exe -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition
 ```
 
-There is still no wake word, always-listening mode, streaming transcript, or AI command guessing.
+There is still no wake word, unattended startup of listening, streaming transcript, or AI command guessing. Toggle listening is always started and stopped explicitly by the configured user input.
 
 ## Verification
 
