@@ -36,8 +36,8 @@ Generalize the deterministic runtime into capability-neutral contracts without c
 
 Result:
 
-- 109 tests passed.
-- 2 existing live Windows adapter checks remain intentionally skipped for native verification.
+- 109 tests completed successfully: 107 passed and 2 were skipped.
+- The skipped checks cover existing live Windows adapters reserved for native verification.
 - Legacy parser, assistant, confirmation, workflow, starter, and CLI tests remain green.
 - New tests cover registry contracts, argument validation, structured result identity, safety metadata, workflow contract validation, auditing, and neutral session state.
 
