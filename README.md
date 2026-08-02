@@ -50,7 +50,8 @@ Phase 1 additionally provides:
 
 Phase 2 additionally provides:
 
-- a visible Windows command window with transcript and execution status
+- a modern dark Windows command console with a searchable, categorized side legend covering every supported voice phrase
+- clickable command examples, a styled session feed, microphone selection, and live execution status
 - native Excel workbook, sheet, cell, entry, navigation, save, and reporting operations
 - text, integer, decimal, `pass`, `fail`, and `N/A` cell entry
 - four-way cell navigation and worksheet-boundary checks
