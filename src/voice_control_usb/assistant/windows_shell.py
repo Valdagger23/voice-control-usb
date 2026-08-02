@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from queue import Empty, SimpleQueue
 from threading import Thread
+from typing import Callable
 
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.speech_flow import (
@@ -16,7 +17,11 @@ from voice_control_usb.audio.transcriber import (
 )
 
 
-def run_windows_shell(app: AssistantApp, transcriber: SpeechTranscriber) -> None:
+def run_windows_shell(
+    app: AssistantApp,
+    transcriber: SpeechTranscriber,
+    shutdown_requested: Callable[[], bool] | None = None,
+) -> None:
     """Run a visible typed and push-to-talk window against the shared pipeline."""
 
     import tkinter as tk
@@ -145,6 +150,13 @@ def run_windows_shell(app: AssistantApp, transcriber: SpeechTranscriber) -> None
             status.set("Ready")
         root.after(100, poll_speech_result)
 
+    def poll_shutdown_request() -> None:
+        if shutdown_requested is not None and shutdown_requested():
+            status.set("Stopping safely for USB removal...")
+            root.after(50, root.destroy)
+            return
+        root.after(250, poll_shutdown_request)
+
     run_button = ttk.Button(command_row, text="Run", command=submit)
     run_button.pack(side="left", padx=(8, 0))
     voice_button = ttk.Button(command_row, text="Push to talk", command=capture_speech)
@@ -161,4 +173,5 @@ def run_windows_shell(app: AssistantApp, transcriber: SpeechTranscriber) -> None
     command_entry.bind("<Return>", submit)
     command_entry.focus_set()
     root.after(100, poll_speech_result)
+    root.after(250, poll_shutdown_request)
     root.mainloop()

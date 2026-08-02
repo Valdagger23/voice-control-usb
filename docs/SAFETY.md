@@ -12,10 +12,15 @@
 - Do not rely on USB autorun.
 - Require explicit trusted USB validation before launch.
 - Keep the local starter minimal so the USB payload does not inherit unnecessary host privileges.
-- Trust the USB only when both the configured volume label and marker file match.
+- Trust the USB only when the removable-volume label and host-pinned UUID match and the active release has a valid Ed25519 signature.
+- Verify the signed USB ID, release ID, entry point, file size, and SHA-256 hash of every release file before launch.
 - Launch the packaged USB assistant through a direct executable path, not through arbitrary shell execution.
 - Pass the USB root and runtime directory explicitly to the assistant instead of relying on implicit shell state.
 - Keep runtime data lookups explicit so bundled registries and allowlists fail loudly when missing.
+- Keep the private release-signing key off the USB and prepared laptops; store only its public key in local starter configuration.
+- Activate updates only after verifying both the source and the staged USB copy, then atomically replace the active pointer.
+- Preserve the previous immutable release for recovery and ignore incomplete staging directories.
+- Use cooperative shutdown and wait for the assistant lock to clear before removing the USB.
 
 ## Command safety
 - Parse only approved command grammar.

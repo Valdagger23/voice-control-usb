@@ -20,6 +20,10 @@ windows = [
   "winrt-Windows.Media.Control>=3.2.1; platform_system=='Windows'",
 ]
 speech = ["SpeechRecognition>=3.10"]
+packaging = [
+  "cryptography>=46.0.0",
+  "pyinstaller>=6.21.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

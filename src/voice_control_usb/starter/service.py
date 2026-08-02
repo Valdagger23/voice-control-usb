@@ -7,10 +7,19 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import subprocess
-from time import sleep
-from typing import Protocol
+from time import monotonic, sleep
+from typing import Callable, Protocol
 
 from voice_control_usb.starter.config import StarterConfig
+from voice_control_usb.runtime_support import inspect_instance_lock
+from voice_control_usb.starter.manifest import (
+    ActiveRelease,
+    MANIFEST_NAME,
+    SIGNATURE_NAME,
+    ManifestVerificationError,
+    ReleaseManifest,
+    UsbIdentity,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +37,7 @@ class LaunchSpec:
     usb_root: Path
     cwd: Path
     executable_path: Path
+    release_id: str
     command: tuple[str, ...]
     env_overrides: dict[str, str]
 
@@ -100,11 +110,15 @@ class TrustedUsbStarter:
         volume_provider: VolumeProvider,
         launcher: ProcessLauncher | None = None,
         logger: StarterLogger | None = None,
+        sleeper: Callable[[float], None] = sleep,
+        monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         self.config = config
         self.volume_provider = volume_provider
         self.launcher = launcher or SubprocessLauncher()
         self.logger = logger or StarterLogger(config.log_path)
+        self._sleep = sleeper
+        self._monotonic = monotonic_clock
         self._running_process: ProcessHandle | None = None
         self._running_usb_root: Path | None = None
 
@@ -135,7 +149,7 @@ class TrustedUsbStarter:
         volume = trusted_volumes[0]
         try:
             spec = self.build_launch_spec(volume)
-        except FileNotFoundError as error:
+        except (FileNotFoundError, ManifestVerificationError, RuntimeError, ValueError) as error:
             return self._record(
                 StarterResult(
                     launched=False,
@@ -143,14 +157,30 @@ class TrustedUsbStarter:
                     usb_root=volume.mount_path,
                 )
             )
-        except ValueError as error:
+
+        lock_path = spec.usb_root / "runtime" / "assistant.lock"
+        lock_status = inspect_instance_lock(lock_path)
+        if lock_status == "active":
             return self._record(
                 StarterResult(
                     launched=False,
-                    message=str(error),
-                    usb_root=volume.mount_path,
+                    message=f"Assistant already running from {spec.usb_root}.",
+                    usb_root=spec.usb_root,
                 )
             )
+        if lock_status == "invalid":
+            return self._record(
+                StarterResult(
+                    launched=False,
+                    message=(
+                        "Assistant runtime lock is invalid. Confirm no assistant process is "
+                        "running before removing the lock."
+                    ),
+                    usb_root=spec.usb_root,
+                )
+            )
+        if lock_status == "stale":
+            lock_path.unlink(missing_ok=True)
 
         try:
             self._running_process = self.launcher.launch(spec)
@@ -180,7 +210,7 @@ class TrustedUsbStarter:
             completed += 1
             if iterations is not None and completed >= iterations:
                 break
-            sleep(self.config.poll_interval_seconds)
+            self._sleep(self.config.poll_interval_seconds)
 
     def find_trusted_volumes(self) -> list[UsbVolume]:
         """Return all currently trusted removable volumes."""
@@ -188,55 +218,121 @@ class TrustedUsbStarter:
         return [volume for volume in self.volume_provider.list_volumes() if self.is_trusted_volume(volume)]
 
     def is_trusted_volume(self, volume: UsbVolume) -> bool:
-        """Validate volume label and trust marker together."""
+        """Validate the removable-volume label and host-pinned USB identity."""
 
-        return (
-            volume.volume_label.casefold() == self.config.expected_volume_label.casefold()
-            and self.marker_path(volume).is_file()
-        )
+        if volume.volume_label.casefold() != self.config.expected_volume_label.casefold():
+            return False
+        try:
+            identity = UsbIdentity.load(self.identity_path(volume))
+        except ManifestVerificationError:
+            return False
+        return identity.usb_id == self.config.expected_usb_id
 
-    def marker_path(self, volume: UsbVolume) -> Path:
-        """Return the required trust marker path for a candidate volume."""
+    def identity_path(self, volume: UsbVolume) -> Path:
+        """Return the host-configured identity path for a candidate volume."""
 
-        return volume.mount_path / self.config.trust_marker
+        return self._resolve_within_usb_root(volume.mount_path.resolve(), self.config.identity_file)
 
     def build_launch_spec(self, volume: UsbVolume) -> LaunchSpec:
         """Resolve the assistant command and environment for a trusted USB."""
 
         usb_root = volume.mount_path.resolve()
-        cwd = self._resolve_within_usb_root(usb_root, self.config.assistant_workdir)
-        if not cwd.is_dir():
-            raise FileNotFoundError(
-                f"Configured assistant working directory not found on trusted USB: {cwd}"
-            )
-
-        executable_path = self._resolve_within_usb_root(
-            usb_root,
-            self.config.assistant_relative_executable,
+        identity = UsbIdentity.load(
+            self._resolve_within_usb_root(usb_root, self.config.identity_file)
+        )
+        if identity.usb_id != self.config.expected_usb_id:
+            raise ManifestVerificationError("USB identity does not match this prepared host.")
+        active = ActiveRelease.load(
+            self._resolve_within_usb_root(usb_root, self.config.active_release_file)
+        )
+        releases_root = self._resolve_within_usb_root(usb_root, self.config.releases_dir)
+        release_dir = self._resolve_within_usb_root(
+            releases_root,
+            active.release_id,
+        )
+        if not release_dir.is_dir():
+            raise FileNotFoundError(f"Active release directory is missing: {release_dir}")
+        manifest = ReleaseManifest.load(release_dir / MANIFEST_NAME)
+        executable_path = manifest.verify(
+            release_dir,
+            release_dir / SIGNATURE_NAME,
+            public_key=self.config.manifest_public_key,
+            expected_usb_id=identity.usb_id,
+            expected_release_id=active.release_id,
         )
         if not executable_path.is_file():
-            raise FileNotFoundError(
-                f"Packaged assistant executable not found on trusted USB: {executable_path}"
-            )
+            raise FileNotFoundError(f"Packaged assistant executable is missing: {executable_path}")
         runtime_dir = (usb_root / "runtime").resolve()
+        shutdown_request = runtime_dir / "shutdown.request"
+        shutdown_request.unlink(missing_ok=True)
 
         return LaunchSpec(
             usb_root=usb_root,
-            cwd=cwd,
+            cwd=release_dir,
             executable_path=executable_path,
+            release_id=active.release_id,
             command=(
                 str(executable_path),
+                "--window",
                 "--usb-root",
                 str(usb_root),
                 "--runtime-dir",
                 str(runtime_dir),
             ),
-            env_overrides={"VOICE_CONTROL_USB_USB_ROOT": str(usb_root)},
+            env_overrides={
+                "VOICE_CONTROL_USB_USB_ROOT": str(usb_root),
+                "VOICE_CONTROL_USB_RUNTIME_DIR": str(runtime_dir),
+            },
+        )
+
+    def request_safe_shutdown(self) -> StarterResult:
+        """Request cooperative assistant exit and wait for its runtime lock to clear."""
+
+        trusted_volumes = self.find_trusted_volumes()
+        if not trusted_volumes:
+            return self._record(StarterResult(False, "Trusted USB not detected."))
+        if len(trusted_volumes) > 1:
+            return self._record(
+                StarterResult(False, "Multiple trusted USB volumes detected. Shutdown skipped.")
+            )
+        volume = trusted_volumes[0]
+        runtime_dir = (volume.mount_path.resolve() / "runtime").resolve()
+        lock_path = runtime_dir / "assistant.lock"
+        request_path = runtime_dir / "shutdown.request"
+        if not lock_path.exists():
+            request_path.unlink(missing_ok=True)
+            return self._record(
+                StarterResult(False, "Assistant is not running; USB is ready for removal.", volume.mount_path)
+            )
+
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(
+            f'{{"requested_at":"{datetime.now(timezone.utc).isoformat()}"}}\n',
+            encoding="utf-8",
+        )
+        deadline = self._monotonic() + self.config.shutdown_timeout_seconds
+        while lock_path.exists() and self._monotonic() < deadline:
+            self._sleep(0.1)
+        if lock_path.exists():
+            return self._record(
+                StarterResult(
+                    False,
+                    "Assistant did not stop in time. Do not remove the USB yet.",
+                    volume.mount_path,
+                )
+            )
+        request_path.unlink(missing_ok=True)
+        self._running_process = None
+        self._running_usb_root = None
+        return self._record(
+            StarterResult(False, "Assistant stopped; USB is ready for removal.", volume.mount_path)
         )
 
     @staticmethod
     def _resolve_within_usb_root(usb_root: Path, relative_path: str) -> Path:
         normalized_relative_path = relative_path.replace("\\", "/")
+        if Path(normalized_relative_path).is_absolute():
+            raise ValueError(f"Invalid USB layout path must be relative: {relative_path}")
         candidate = (usb_root / normalized_relative_path).resolve()
         try:
             candidate.relative_to(usb_root)

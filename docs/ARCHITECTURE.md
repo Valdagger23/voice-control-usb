@@ -6,10 +6,14 @@ VoiceControl is a capability-based Windows assistant. Excel is the first product
 
 ## Deployable components
 
-1. **Local Windows starter** — discovers and verifies the trusted USB payload, prevents duplicate launches, and starts the assistant without performing automation.
-2. **USB-hosted assistant** — owns the user interface, input, command processing, safety policy, capability routing, session state, and audit history.
+1. **Local Windows starter** — discovers the removable drive, validates its host-pinned identity and signed immutable release, coordinates updates and safe removal, prevents duplicate launches, and starts the assistant without performing automation.
+2. **USB-hosted assistant** — owns the user interface, input, command processing, safety policy, capability routing, session state, audit history, runtime lock, and cooperative shutdown monitor.
 
 The system does not use USB autorun. Account credentials remain in the prepared Windows user's credential store rather than portable plaintext files.
+
+## Portable release flow
+
+The local configuration pins a USB UUID and an Ed25519 public key. The USB active pointer names one immutable release whose signed manifest binds the USB ID, release ID, entry point, and every file's size and SHA-256 hash. Updates are copied and re-verified under a temporary release directory before a directory rename and atomic active-pointer replacement. An interruption therefore leaves the prior active release intact. All assistant runtime paths are derived from the removable-drive root detected during the current scan.
 
 ## Target layers
 

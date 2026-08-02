@@ -105,12 +105,16 @@ Exit: Discord exposes inspected microphone/deafen state through accessibility mo
 
 Goal: turn the proven assistant into a reliable portable deployment.
 
+Status: complete on the `agent/phase-7-packaging-hardening` branch.
+
 - Package the assistant and required runtime assets for Windows.
 - Verify USB identity and an application manifest before launch.
 - Resolve all paths from the detected USB root rather than a fixed drive letter.
 - Prevent duplicate launches and provide safe assistant shutdown before removal.
 - Stage and verify updates before replacing the working version.
 - Exercise missing files, changed drive letters, interrupted startup, and recovery.
+
+Exit: the signed packaged assistant launches through the packaged starter from the real removable D: drive, rejects duplicates through native Windows PID inspection, closes cooperatively before removal, and preserves or recovers a verified release across interrupted updates.
 
 ## Quality gates for every phase
 

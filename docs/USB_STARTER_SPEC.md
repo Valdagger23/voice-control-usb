@@ -1,116 +1,67 @@
-# USB Starter Spec
+# Trusted USB Starter Specification
 
-## Purpose
-The local starter is the laptop-resident deployment component.
-It is separate from the USB-hosted assistant and has one narrow job:
+## Responsibility
 
-- detect removable drives
-- validate the trusted USB identity
-- launch the assistant from the USB
-- avoid duplicate launches
-- log what happened
+The laptop-resident starter has a narrow role: enumerate removable drives, validate a host-pinned USB identity, verify a signed application release, prevent duplicate launch, start the visible assistant without a shell, coordinate safe shutdown, and activate only fully verified updates. It performs no assistant automation and does not use USB autorun.
 
-It does not rely on USB autorun.
+## Trust checks
 
-## Prepared laptop setup
-Each prepared Windows laptop needs a local starter config JSON file.
-Minimum required fields:
+A payload can launch only when all checks pass:
 
-- `expected_volume_label`
-- `trust_marker`
+1. Windows reports the drive as removable.
+2. The volume label matches `expected_volume_label` case-insensitively.
+3. `voice-control-usb.identity.json` contains the host-pinned UUID.
+4. `active-release.json` contains a safe release ID.
+5. The selected immutable release exists below `releases`.
+6. Its Ed25519 signature verifies against the host-local public key.
+7. Its manifest USB ID and release ID match the selected USB and directory.
+8. Every declared file has the signed size and SHA-256 hash.
+9. The signed entry point exists and remains inside its release directory.
 
-Recommended fields:
-
-- `assistant_relative_executable`
-- `assistant_workdir`
-- `poll_interval_seconds`
-- `log_path`
-
-Example:
-
-```json
-{
-  "expected_volume_label": "VOICEBOT",
-  "trust_marker": "voice-control-usb.trusted",
-  "assistant_relative_executable": "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe",
-  "assistant_workdir": ".",
-  "poll_interval_seconds": 2.0,
-  "log_path": "C:\\ProgramData\\voice-control-usb\\starter.log"
-}
-```
-
-## Trusted USB identity
-The USB is trusted only when both checks pass:
-
-1. the removable volume label exactly matches the configured `expected_volume_label`
-2. the configured marker file exists in the USB root
-
-Example trusted layout:
-
-```text
-E:\
-  voice-control-usb.trusted
-  dist\
-    voice-control-usb-assistant\
-      voice-control-usb-assistant.exe
-```
-
-If either the label or marker check fails, the starter does not launch anything.
+Any missing, malformed, escaped, altered, ambiguous, or unverifiable path fails closed.
 
 ## Launch behavior
-When one trusted USB is detected, the starter builds a direct executable launch:
 
-- command: `<USB_ROOT>\<assistant_relative_executable>`
-- working directory: `<usb_root>/<assistant_workdir>`
-- assistant args:
-  - `--usb-root <USB_ROOT>`
-  - `--runtime-dir <USB_ROOT>\runtime`
+The starter resolves every path from the drive root returned by the current Windows scan. The launch is direct and uses `shell=False`:
 
-The launch path uses `subprocess.Popen(..., shell=False)` only.
-No arbitrary shell command execution is used.
-
-## Duplicate-launch prevention
-The starter tracks the launched assistant process in memory, and the assistant also guards its own runtime directory with a lock file.
-
-- if the assistant is still running, the starter does not launch another copy
-- if the tracked process has exited, the starter allows a fresh launch
-- if more than one trusted USB is visible at once, launch is skipped to avoid ambiguity
-- if the starter is restarted while the assistant is still active, the assistant lock file still blocks a duplicate packaged instance
-
-## Watcher behavior
-The starter can run:
-
-- one scan cycle with `--once`
-- a polling loop using `poll_interval_seconds`
-
-The watcher remains intentionally small.
-It does not attempt broader device management, desktop control, or assistant orchestration.
-
-## Windows verification
-The removable-drive watcher is Windows-only.
-Verify on a prepared Windows laptop with a configured USB:
-
-```powershell
-C:\Program Files\voice-control-usb\voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --once
+```text
+<SIGNED_ENTRYPOINT> --window --usb-root <USB_ROOT> --runtime-dir <USB_ROOT>\runtime
 ```
 
-Expected outcomes:
+No fixed drive letter is stored. Runtime and environment paths are explicit.
 
-- trusted USB present: `Launched assistant from trusted USB: <drive>`
-- trusted USB already running: `Assistant already running from <drive>.`
-- no trusted USB: `Trusted USB not detected.`
-- ambiguous trusted USBs: `Multiple trusted USB volumes detected. Launch skipped.`
+## Duplicate protection and recovery
 
-## WSL development status
-WSL tests cover:
+- A running watcher tracks its child process.
+- A fresh watcher inspects the USB runtime lock before spawning.
+- The assistant creates the lock atomically and records its PID.
+- Windows PID liveness uses `OpenProcess`, not Unix signal-zero behavior.
+- Stale locks with a valid dead PID are removed; malformed locks block launch until an operator confirms no assistant process is running and removes the lock.
+- A process releases only a lock that still records its own PID.
 
-- JSON config parsing
-- USB label and marker validation
-- duplicate-launch prevention
-- relaunch after process exit
-- packaged assistant path resolution
-- assistant runtime-argument generation
-- invalid USB layout rejection
+## Safe shutdown
 
-WSL does not verify live removable-drive discovery on Windows.
-That part still requires native Windows testing.
+`--prepare-removal` verifies the host-pinned USB identity, writes `runtime\shutdown.request`, and waits for `assistant.lock` to disappear. It remains available even if the active release pointer is damaged. The visible shell polls for the request, closes, and releases the lock. A timeout warns the user not to remove the drive.
+
+## Update behavior
+
+`--activate-update <RELEASE_DIR>` verifies the source, copies it to a unique staging directory under the USB's releases directory, re-verifies the copy, renames it into its immutable final directory, then atomically replaces the active pointer. Old releases are retained. `--recover` ignores partial and corrupt directories, selects the highest named verified installed release, repairs the active pointer, and removes interrupted staging directories.
+
+## Local configuration
+
+Required fields:
+
+- `expected_volume_label`
+- `expected_usb_id`
+- `manifest_public_key`
+
+Optional fields:
+
+- `identity_file`
+- `active_release_file`
+- `releases_dir`
+- `poll_interval_seconds`
+- `shutdown_timeout_seconds`
+- `log_path`
+
+The private release-signing key is never a starter configuration field.

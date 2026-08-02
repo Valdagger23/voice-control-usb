@@ -84,6 +84,36 @@ class AssistantRuntimePaths:
     def lock_path(self) -> Path:
         return self.runtime_dir / "assistant.lock"
 
+    @property
+    def shutdown_request_path(self) -> Path:
+        return self.runtime_dir / "shutdown.request"
+
+
+class ShutdownRequestMonitor:
+    """Consume the cooperative stop request used before USB removal."""
+
+    def __init__(self, request_path: Path) -> None:
+        self.request_path = request_path
+
+    def requested(self) -> bool:
+        try:
+            exists = self.request_path.is_file()
+        except OSError:
+            return False
+        if not exists:
+            return False
+        try:
+            self.request_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
+    def clear(self) -> None:
+        try:
+            self.request_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
 
 class AssistantInstanceGuard:
     """Cross-platform lock file guard for packaged assistant instances."""
@@ -97,6 +127,7 @@ class AssistantInstanceGuard:
         self.lock_path = lock_path
         self.pid_provider = pid_provider or os.getpid
         self._owned = False
+        self._owner_pid: int | None = None
 
     def acquire(self) -> None:
         """Acquire the runtime lock or raise when another live instance owns it."""
@@ -108,9 +139,8 @@ class AssistantInstanceGuard:
             try:
                 fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
-                payload = self._read_payload()
-                existing_pid = int(payload.get("pid", 0) or 0)
-                if existing_pid and not self._pid_is_running(existing_pid):
+                status = inspect_instance_lock(self.lock_path)
+                if status == "stale":
                     self.lock_path.unlink(missing_ok=True)
                     continue
                 raise DuplicateInstanceError(
@@ -132,6 +162,7 @@ class AssistantInstanceGuard:
                 raise
 
             self._owned = True
+            self._owner_pid = current_pid
             return
 
     def release(self) -> None:
@@ -139,8 +170,15 @@ class AssistantInstanceGuard:
 
         if not self._owned:
             return
-        self.lock_path.unlink(missing_ok=True)
+        payload = self._read_payload()
+        try:
+            current_owner = int(payload.get("pid", 0) or 0)
+        except (TypeError, ValueError):
+            current_owner = 0
+        if current_owner == self._owner_pid:
+            self.lock_path.unlink(missing_ok=True)
         self._owned = False
+        self._owner_pid = None
 
     def _read_payload(self) -> dict[str, object]:
         try:
@@ -157,8 +195,40 @@ class AssistantInstanceGuard:
 
     @staticmethod
     def _pid_is_running(pid: int) -> bool:
+        if sys.platform == "win32":
+            return _windows_pid_is_running(pid)
         try:
             os.kill(pid, 0)
         except OSError:
             return False
         return True
+
+
+def _windows_pid_is_running(pid: int) -> bool:
+    """Check a PID without relying on the Unix-only signal-zero convention."""
+
+    import ctypes
+
+    process_query_limited_information = 0x1000
+    error_access_denied = 5
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if handle:
+        kernel32.CloseHandle(handle)
+        return True
+    return int(kernel32.GetLastError()) == error_access_denied
+
+
+def inspect_instance_lock(lock_path: Path) -> str:
+    """Return missing, active, stale, or invalid for an assistant lock file."""
+
+    if not lock_path.is_file():
+        return "missing"
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        pid = int(payload.get("pid", 0) or 0) if isinstance(payload, dict) else 0
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return "invalid"
+    if pid <= 0:
+        return "invalid"
+    return "active" if AssistantInstanceGuard._pid_is_running(pid) else "stale"

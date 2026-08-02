@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 6 deliberate Discord control is complete on top of the native Excel, speech, media, and browser slices.
+The planned Phase 0-7 roadmap is complete. Voice Control now combines the native Excel, speech, media, browser, and deliberate Discord slices with a verified USB deployment and recovery path.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
 - Discord launch, allowlisted navigation, visible drafts, and inspected device state now use Windows accessibility without user tokens or self-bot APIs.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is USB packaging, deployment, and recovery hardening.
+- Signed immutable releases, host-pinned USB identity, duplicate protection, safe removal, staged updates, and recovery are implemented and verified on the physical D: removable drive.
 
 Planning documents:
 
@@ -26,6 +26,7 @@ Planning documents:
 - [Phase 4 baseline](docs/PHASE_4_BASELINE.md)
 - [Phase 5 baseline](docs/PHASE_5_BASELINE.md)
 - [Phase 6 baseline](docs/PHASE_6_BASELINE.md)
+- [Phase 7 baseline](docs/PHASE_7_BASELINE.md)
 
 ## Existing prototype
 
@@ -89,6 +90,16 @@ Phase 6 additionally provides:
 - camera actions only when Discord exposes reliable state in the current call view
 - personal-token, self-bot, bulk-message, and background-message automation blocked
 
+Phase 7 additionally provides:
+
+- signed Ed25519 release manifests with complete file hashes and sizes
+- a host-pinned USB UUID and public verification key
+- immutable releases selected through an atomic active pointer
+- portable launch from the currently detected drive root, never a fixed letter
+- duplicate-instance protection using native Windows PID inspection
+- cooperative assistant shutdown before USB removal
+- staged double-verification, atomic activation, and verified-release recovery
+
 ## Development environment
 - Active repository: `D:\VoiceControl`
 - Windows Python 3.12 or newer in a project-local `.venv`
@@ -105,10 +116,12 @@ py -3 -m venv .venv
 
 ## Trusted USB starter
 - Local starter config is JSON-based and separate from the USB-hosted assistant
-- Trust requires both the expected USB volume label and a marker file in the USB root
+- Trust requires the expected removable-volume label, host-pinned USB UUID, signed manifest, and matching hash and size for every release file
 - The starter launches a packaged assistant executable from the trusted USB with `shell=False`
-- The starter passes `--usb-root` and `--runtime-dir` explicitly to the packaged assistant
-- Duplicate launches are prevented both by the starter’s child-process tracking and the assistant’s runtime lock file
+- The starter passes `--window`, `--usb-root`, and `--runtime-dir` explicitly to the packaged assistant
+- Duplicate launches are prevented by watcher tracking, pre-launch lock inspection, and the assistant's atomic runtime lock
+- `--prepare-removal` cooperatively closes the assistant and waits for lock cleanup
+- `--activate-update` verifies before and after staging, then atomically switches the active release; `--recover` repairs the pointer from verified releases
 - Details: [docs/USB_STARTER_SPEC.md](docs/USB_STARTER_SPEC.md)
 - Packaging details: [docs/DEPLOYMENT_PACKAGING.md](docs/DEPLOYMENT_PACKAGING.md)
 
@@ -197,10 +210,10 @@ WSL baseline, when the USB filesystem is mounted:
 - `python -m voice_control_usb --excel-adapter com "go to A123"`
 - `python -m voice_control_usb --desktop-adapter windows "open app notepad"`
 - `python -m voice_control_usb --desktop-adapter windows "open url https://example.com"`
-- `.\scripts\build_windows_binaries.ps1`
+- `.\scripts\build_windows_binaries.ps1 -UsbId "<UUID>" -ReleaseId "0.1.0" -SigningPrivateKeyPath "C:\secure\voice-control-signing-key.pem"`
 - `.\scripts\install_starter_task.ps1 -StarterExe "C:\Program Files\voice-control-usb\voice-control-usb-starter.exe" -ConfigPath "C:\ProgramData\voice-control-usb\starter.json"`
 - `C:\Program Files\voice-control-usb\voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --once`
-- `E:\dist\voice-control-usb-assistant\voice-control-usb-assistant.exe --usb-root E:\ --runtime-dir E:\runtime`
+- `C:\Program Files\voice-control-usb\voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --prepare-removal`
 - Session mode is available with `python -m voice_control_usb --excel-adapter com --session`
 - Speech session mode is available with `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 

@@ -4,9 +4,9 @@
 This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-Phase 6 Discord control is complete. The installed client runs with Windows accessibility state for allowlisted navigation, visible unsent drafts, and inspected mic/deafen/camera controls. A confirmed draft still requires the user's physical Enter key, preserving the no-self-bot boundary. Phase 7 packaging and hardening is next.
+The planned Phase 0-7 baseline is complete. The signed packaged assistant launches through the local starter from a host-pinned removable USB, rejects duplicates, supports cooperative safe removal, and activates or recovers only fully verified immutable releases.
 
-Do not broaden implementation scope beyond packaging and hardening until the Phase 7 trusted USB deployment and recovery workflow is verified.
+Treat further capabilities as a new planned phase. Preserve the verified deployment, safety, privacy, and recovery boundaries.
 
 ## Primary goal
 Build a reliable modular system with these layers:

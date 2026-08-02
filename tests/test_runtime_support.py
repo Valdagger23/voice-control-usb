@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,6 +13,8 @@ from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
+    ShutdownRequestMonitor,
+    inspect_instance_lock,
     package_root,
     resolve_packaged_data_path,
 )
@@ -101,6 +105,30 @@ class RuntimeSupportTests(unittest.TestCase):
             self.assertTrue(lock_path.exists())
             guard.release()
             self.assertFalse(lock_path.exists())
+
+    def test_shutdown_request_monitor_consumes_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            request_path = Path(tmp_dir) / "shutdown.request"
+            request_path.write_text("{}", encoding="utf-8")
+            monitor = ShutdownRequestMonitor(request_path)
+
+            self.assertTrue(monitor.requested())
+            self.assertFalse(request_path.exists())
+            self.assertFalse(monitor.requested())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows PID probe")
+    def test_windows_pid_probe_detects_current_process(self) -> None:
+        self.assertTrue(AssistantInstanceGuard._pid_is_running(os.getpid()))
+
+    def test_lock_inspection_distinguishes_invalid_and_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            lock_path = Path(tmp_dir) / "assistant.lock"
+            self.assertEqual(inspect_instance_lock(lock_path), "missing")
+            lock_path.write_text("not json", encoding="utf-8")
+            self.assertEqual(inspect_instance_lock(lock_path), "invalid")
+            lock_path.write_text('{"pid":999999}', encoding="utf-8")
+            with patch.object(AssistantInstanceGuard, "_pid_is_running", return_value=False):
+                self.assertEqual(inspect_instance_lock(lock_path), "stale")
 
 
 if __name__ == "__main__":

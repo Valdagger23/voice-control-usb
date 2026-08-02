@@ -24,7 +24,9 @@ class WindowsUsbVolumeProvider:
         if length <= 0:
             return []
 
-        drives = [entry for entry in buffer.value.split("\x00") if entry]
+        # GetLogicalDriveStringsW returns a multi-string. ``buffer.value`` stops
+        # at the first NUL and therefore hides every drive after the first one.
+        drives = _split_logical_drive_strings("".join(buffer[:length]))
         volumes: list[UsbVolume] = []
         for drive in drives:
             if kernel32.GetDriveTypeW(ctypes.c_wchar_p(drive)) != DRIVE_REMOVABLE:
@@ -56,3 +58,9 @@ class WindowsUsbVolumeProvider:
             )
 
         return volumes
+
+
+def _split_logical_drive_strings(raw: str) -> list[str]:
+    """Split the NUL-delimited value returned by GetLogicalDriveStringsW."""
+
+    return [entry for entry in raw.split("\x00") if entry]

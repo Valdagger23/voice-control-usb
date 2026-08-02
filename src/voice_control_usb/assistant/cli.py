@@ -24,6 +24,7 @@ from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
+    ShutdownRequestMonitor,
 )
 from voice_control_usb.spotify.connect import connect_spotify_account
 from voice_control_usb.spotify.credentials import WindowsCredentialStore
@@ -227,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     instance_guard = AssistantInstanceGuard(runtime_paths.lock_path)
+    shutdown_monitor = ShutdownRequestMonitor(runtime_paths.shutdown_request_path)
     try:
         instance_guard.acquire()
     except DuplicateInstanceError as error:
@@ -270,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             except (ImportError, RuntimeError, ValueError) as error:
                 print(f"Assistant startup failed: {error}")
                 return 2
-            run_windows_shell(app, transcriber)
+            run_windows_shell(app, transcriber, shutdown_monitor.requested)
             return 0
         if namespace.session:
             if namespace.input_mode == "speech":
@@ -298,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
                 browser.close()
         with suppress(Exception):
             instance_guard.release()
+        shutdown_monitor.clear()
 
 
 def _handle_spotify_mode(namespace: argparse.Namespace) -> int:

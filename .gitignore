@@ -5,5 +5,9 @@ __pycache__/
 .venv/
 env/
 runtime/
+build/
+dist/
+work/
+*.spec
 .DS_Store
 Thumbs.db
