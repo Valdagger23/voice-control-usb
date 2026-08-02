@@ -22,6 +22,13 @@ def discord_action_specs() -> list[ActionSpec]:
         ActionSpec("discord", "discord_disable_camera", "Disable the Discord camera.", reversible=True),
         ActionSpec("discord", "discord_enable_camera", "Enable the Discord camera.", safety_class=confirm, reversible=True),
         ActionSpec("discord", "discord_report_status", "Report visible Discord draft and device state."),
+        ActionSpec("discord", "discord_join_channel", "Join an allowlisted Discord voice channel.", argument_types={"alias": str}),
+        ActionSpec("discord", "discord_leave_call", "Leave the active Discord call.", reversible=True),
+        ActionSpec("discord", "discord_read_channel", "Read the current Discord channel."),
+        ActionSpec("discord", "discord_read_latest", "Read the latest visible Discord message."),
+        ActionSpec("discord", "discord_set_input_volume", "Set Discord input volume.", reversible=True, argument_types={"percent": int}),
+        ActionSpec("discord", "discord_set_output_volume", "Set Discord output volume.", reversible=True, argument_types={"percent": int}),
+        ActionSpec("discord", "discord_prepare_screen_share", "Open the Discord screen-share picker.", safety_class=confirm),
         ActionSpec("discord", "discord_blocked_action", "Reject self-bot, bulk, or token automation.", safety_class=SafetyClass.BLOCKED, argument_types={"request": str}),
     ]
 
@@ -45,6 +52,13 @@ class DiscordCapability:
             "discord_disable_camera": lambda c: self._result(c, self.adapter.set_camera_enabled(False), "Discord camera disabled"),
             "discord_enable_camera": lambda c: self._result(c, self.adapter.set_camera_enabled(True), "Discord camera enabled"),
             "discord_report_status": lambda c: self._result(c, self.adapter.report(), "Discord status"),
+            "discord_join_channel": lambda c: self._result(c, self.adapter.join_channel(self._text(c, "alias")), "Joined Discord channel"),
+            "discord_leave_call": lambda c: self._result(c, self.adapter.leave_call(), "Left Discord call"),
+            "discord_read_channel": lambda c: ActionResult("discord", c.action, f"Current Discord channel: {self.adapter.read_channel()}"),
+            "discord_read_latest": lambda c: ActionResult("discord", c.action, f"Latest Discord message: {self.adapter.read_latest_message()}"),
+            "discord_set_input_volume": lambda c: self._result(c, self.adapter.set_input_volume(self._percent(c)), "Discord input volume updated"),
+            "discord_set_output_volume": lambda c: self._result(c, self.adapter.set_output_volume(self._percent(c)), "Discord output volume updated"),
+            "discord_prepare_screen_share": lambda c: self._result(c, self.adapter.prepare_screen_share(), "Discord screen-share picker opened; choose what to share yourself"),
             "discord_blocked_action": lambda c: ActionResult("discord", c.action, f"Discord action is blocked: {self._text(c, 'request')}", succeeded=False),
         }
         return [ActionBinding(spec, handlers[spec.action_id]) for spec in discord_action_specs()]
@@ -56,6 +70,9 @@ class DiscordCapability:
             "microphone_muted": state.microphone_muted,
             "deafened": state.deafened,
             "camera_enabled": state.camera_enabled,
+            "input_volume": state.input_volume,
+            "output_volume": state.output_volume,
+            "in_call": state.in_call,
         }
         draft = "draft present" if state.draft else "no draft"
         message = f"{prefix}: {state.target or 'current view'}; {draft}; mic={self._state(state.microphone_muted)}, deafened={self._state(state.deafened)}, camera={self._state(state.camera_enabled)}."
@@ -69,4 +86,11 @@ class DiscordCapability:
     def _text(command: Command, name: str) -> str:
         value = command.arguments.get(name)
         if not isinstance(value, str): raise ValueError(f"Discord argument '{name}' must be text.")
+        return value
+
+    @staticmethod
+    def _percent(command: Command) -> int:
+        value = command.arguments.get("percent")
+        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 100:
+            raise ValueError("Discord volume must be a whole number from 0 to 100.")
         return value

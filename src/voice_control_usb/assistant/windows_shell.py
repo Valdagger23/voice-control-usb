@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from queue import Empty, SimpleQueue
 from threading import Thread
 from typing import Callable
@@ -15,9 +16,26 @@ from voice_control_usb.assistant.speech_flow import (
     dispatch_transcription,
     record_speech_failure,
 )
+from voice_control_usb.assistant.global_controls import (
+    GlobalControlConfig,
+    GlobalControlStore,
+    GlobalInputController,
+    PUSH_TO_TALK,
+    TOGGLE_LISTENING,
+    mode_label,
+)
+from voice_control_usb.assistant.tray import TrayController, create_brand_icon
 from voice_control_usb.audio.transcriber import (
     SpeechTranscriber,
     TranscriptionResult,
+)
+from voice_control_usb.audio.profiled import ProfiledSpeechTranscriber
+from voice_control_usb.audio.speech_profile import (
+    LOCAL_WHISPER,
+    SUPPORTED_LOCALES,
+    SUPPORTED_MODELS,
+    SpeechProfile,
+    WINDOWS_SAPI,
 )
 
 
@@ -51,6 +69,10 @@ def run_windows_shell(
     app: AssistantApp,
     transcriber: SpeechTranscriber,
     shutdown_requested: Callable[[], bool] | None = None,
+    show_window_requested: Callable[[], bool] | None = None,
+    *,
+    global_controls_path: Path | None = None,
+    start_minimized: bool = False,
 ) -> None:
     """Run the visible command deck and push-to-talk assistant window."""
 
@@ -77,8 +99,8 @@ def run_windows_shell(
 
     root = tk.Tk()
     root.title("Voice Control // Command Console")
-    root.geometry("1220x760")
-    root.minsize(980, 620)
+    root.geometry("1520x820")
+    root.minsize(1180, 680)
     root.configure(background=colors["window"])
     root.option_add("*Font", ("Segoe UI", 10))
     root.option_add("*TCombobox*Listbox.background", colors["card"])
@@ -86,6 +108,30 @@ def run_windows_shell(
     root.option_add("*TCombobox*Listbox.selectBackground", colors["cyan"])
     root.option_add("*TCombobox*Listbox.selectForeground", colors["window"])
     _enable_dark_title_bar(root)
+    try:
+        from PIL import ImageTk
+
+        window_icon = ImageTk.PhotoImage(create_brand_icon(64))
+        root.iconphoto(True, window_icon)
+    except (ImportError, OSError, RuntimeError):
+        window_icon = None
+
+    startup_messages: list[str] = []
+    global_control_store = GlobalControlStore(global_controls_path)
+    try:
+        global_control_config = global_control_store.load()
+    except RuntimeError as error:
+        global_control_config = GlobalControlConfig()
+        startup_messages.append(str(error))
+    active_global_config = [global_control_config]
+    profiled_transcriber = (
+        transcriber if isinstance(transcriber, ProfiledSpeechTranscriber) else None
+    )
+    global_control_summary = tk.StringVar()
+    input_controller: list[GlobalInputController | None] = [None]
+    tray_controller: list[TrayController | None] = [None]
+    tray_available = [False]
+    closing = [False]
 
     style = ttk.Style(root)
     style.theme_use("clam")
@@ -187,7 +233,7 @@ def run_windows_shell(
     shell = tk.Frame(root, background=colors["window"])
     shell.pack(fill="both", expand=True)
     shell.grid_rowconfigure(0, weight=1)
-    shell.grid_columnconfigure(1, weight=1)
+    shell.grid_columnconfigure(2, weight=1)
 
     # Command deck sidebar.
     sidebar = tk.Frame(
@@ -220,6 +266,21 @@ def run_windows_shell(
         foreground=colors["text"],
         font=("Segoe UI Semibold", 15),
     ).pack(side="left", padx=(10, 0))
+    tk.Button(
+        brand,
+        text="ROUTINES",
+        command=lambda: toggle_routine_panel(True),
+        background=colors["card"],
+        activebackground=colors["pink"],
+        foreground=colors["muted"],
+        activeforeground=colors["window"],
+        font=("Consolas", 7, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=7,
+        pady=4,
+    ).pack(side="right")
     tk.Label(
         sidebar,
         text="Every supported voice phrase, organized and ready to load.",
@@ -316,9 +377,251 @@ def run_windows_shell(
         wraplength=330,
     ).grid(row=6, column=0, sticky="ew", padx=22, pady=(0, 16))
 
+    # Swappable routine builder. Commands are arranged and run left-to-right.
+    routine_panel = tk.Frame(
+        shell,
+        width=360,
+        background=colors["panel"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    routine_panel.grid(row=0, column=1, sticky="nsew")
+    routine_panel.grid_propagate(False)
+    routine_panel.grid_columnconfigure(0, weight=1)
+    routine_panel.grid_rowconfigure(5, weight=1)
+
+    routine_header = tk.Frame(routine_panel, background=colors["panel"])
+    routine_header.grid(row=0, column=0, sticky="ew", padx=18, pady=(21, 6))
+    routine_header.grid_columnconfigure(0, weight=1)
+    tk.Label(
+        routine_header,
+        text="ROUTINE BUILDER",
+        background=colors["panel"],
+        foreground=colors["text"],
+        font=("Segoe UI Semibold", 15),
+    ).grid(row=0, column=0, sticky="w")
+    tk.Button(
+        routine_header,
+        text="HIDE",
+        command=lambda: toggle_routine_panel(False),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["muted"],
+        activeforeground=colors["text"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=8,
+        pady=4,
+    ).grid(row=0, column=1, sticky="e")
+    tk.Label(
+        routine_panel,
+        text="Drag commands from the deck. Steps run in numbered order from left to right.",
+        background=colors["panel"],
+        foreground=colors["muted"],
+        font=("Segoe UI", 9),
+        justify="left",
+        anchor="w",
+        wraplength=320,
+    ).grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 13))
+
+    routine_name_row = tk.Frame(routine_panel, background=colors["panel"])
+    routine_name_row.grid(row=2, column=0, sticky="ew", padx=18)
+    routine_name_row.grid_columnconfigure(0, weight=1)
+    routine_name = tk.StringVar()
+    routine_name_entry = tk.Entry(
+        routine_name_row,
+        textvariable=routine_name,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["pink"],
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 10),
+    )
+    routine_name_entry.grid(row=0, column=0, sticky="ew", ipady=8)
+    tk.Button(
+        routine_name_row,
+        text="NEW",
+        command=lambda: create_routine(),
+        background=colors["pink"],
+        activebackground="#FA94C5",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+    ).grid(row=0, column=1, sticky="ns", padx=(7, 0))
+
+    routine_select_row = tk.Frame(routine_panel, background=colors["panel"])
+    routine_select_row.grid(row=3, column=0, sticky="ew", padx=18, pady=(9, 0))
+    routine_select_row.grid_columnconfigure(0, weight=1)
+    current_routine = tk.StringVar()
+    routine_selector = ttk.Combobox(
+        routine_select_row,
+        textvariable=current_routine,
+        state="readonly",
+        style="Console.TCombobox",
+    )
+    routine_selector.grid(row=0, column=0, sticky="ew")
+    routine_selector.bind("<<ComboboxSelected>>", lambda _event: select_routine())
+    tk.Button(
+        routine_select_row,
+        text="RUN",
+        command=lambda: run_selected_routine(),
+        background=colors["teal"],
+        activebackground="#4BE2BD",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+    ).grid(row=0, column=1, sticky="ns", padx=(7, 0))
+
+    routine_toolbar = tk.Frame(routine_panel, background=colors["panel"])
+    routine_toolbar.grid(row=4, column=0, sticky="ew", padx=15, pady=(9, 4))
+    for label, callback in (
+        ("RENAME", lambda: rename_routine()),
+        ("DELETE", lambda: prepare_delete_routine()),
+        ("ADD LOADED", lambda: add_loaded_command()),
+    ):
+        tk.Button(
+            routine_toolbar,
+            text=label,
+            command=callback,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=7,
+            pady=5,
+        ).pack(side="left", padx=3)
+
+    routine_body = tk.Frame(routine_panel, background=colors["panel"])
+    routine_body.grid(row=5, column=0, sticky="nsew", padx=18, pady=(5, 8))
+    routine_body.grid_columnconfigure(0, weight=1)
+    routine_body.grid_rowconfigure(1, weight=1)
+    tk.Label(
+        routine_body,
+        text="SEQUENCE  //  LEFT TO RIGHT",
+        background=colors["panel"],
+        foreground=colors["pink"],
+        font=("Consolas", 9, "bold"),
+        anchor="w",
+    ).grid(row=0, column=0, sticky="ew", pady=(4, 7))
+    routine_lane = tk.Canvas(
+        routine_body,
+        background=colors["sidebar"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+        borderwidth=0,
+        height=250,
+        cursor="hand2",
+    )
+    routine_lane.grid(row=1, column=0, sticky="nsew")
+    routine_steps = tk.Frame(routine_lane, background=colors["sidebar"])
+    routine_steps_window = routine_lane.create_window(
+        (10, 10), window=routine_steps, anchor="nw"
+    )
+    routine_steps.bind(
+        "<Configure>",
+        lambda _event: routine_lane.configure(scrollregion=routine_lane.bbox("all")),
+    )
+    routine_lane.bind(
+        "<Configure>",
+        lambda event: routine_lane.itemconfigure(
+            routine_steps_window,
+            height=max(event.height - 20, routine_steps.winfo_reqheight()),
+        ),
+    )
+    routine_lane.bind(
+        "<MouseWheel>",
+        lambda event: routine_lane.xview_scroll(-1 if event.delta > 0 else 1, "units"),
+    )
+
+    lane_nav = tk.Frame(routine_body, background=colors["panel"])
+    lane_nav.grid(row=2, column=0, sticky="ew", pady=(6, 10))
+    tk.Button(
+        lane_nav,
+        text="<",
+        command=lambda: routine_lane.xview_scroll(-3, "units"),
+        background=colors["card"], foreground=colors["muted"],
+        relief="flat", borderwidth=0, cursor="hand2", padx=12,
+    ).pack(side="left")
+    tk.Button(
+        lane_nav,
+        text=">",
+        command=lambda: routine_lane.xview_scroll(3, "units"),
+        background=colors["card"], foreground=colors["muted"],
+        relief="flat", borderwidth=0, cursor="hand2", padx=12,
+    ).pack(side="left", padx=(5, 0))
+    routine_step_count = tk.StringVar(value="00 STEPS")
+    tk.Label(
+        lane_nav,
+        textvariable=routine_step_count,
+        background=colors["panel"],
+        foreground=colors["faint"],
+        font=("Consolas", 8, "bold"),
+    ).pack(side="right")
+
+    tk.Label(
+        routine_body,
+        text="SELECTED STEP",
+        background=colors["panel"],
+        foreground=colors["faint"],
+        font=("Consolas", 8, "bold"),
+        anchor="w",
+    ).grid(row=3, column=0, sticky="ew")
+    step_editor = tk.Entry(
+        routine_body,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["pink"],
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 9),
+    )
+    step_editor.grid(row=4, column=0, sticky="ew", pady=(5, 7), ipady=8)
+    step_controls = tk.Frame(routine_body, background=colors["panel"])
+    step_controls.grid(row=5, column=0, sticky="ew")
+    for label, callback in (
+        ("UPDATE", lambda: update_selected_step()),
+        ("REMOVE", lambda: remove_selected_step()),
+        ("MOVE <", lambda: move_selected_step(-1)),
+        ("MOVE >", lambda: move_selected_step(1)),
+    ):
+        tk.Button(
+            step_controls,
+            text=label,
+            command=callback,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 7, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=5,
+            pady=5,
+        ).pack(side="left", padx=(0, 4))
+
+    routine_panel_visible = [True]
+    selected_step = [-1]
+    drag_payload: dict[str, object] = {}
+
     # Main command console.
     main = tk.Frame(shell, background=colors["window"])
-    main.grid(row=0, column=1, sticky="nsew", padx=28, pady=24)
+    main.grid(row=0, column=2, sticky="nsew", padx=28, pady=24)
     main.grid_columnconfigure(0, weight=1)
     main.grid_rowconfigure(2, weight=1)
 
@@ -429,6 +732,13 @@ def run_windows_shell(
     )
     control_card.grid(row=3, column=0, sticky="ew", pady=(14, 0))
     control_card.grid_columnconfigure(1, weight=1)
+
+    def refresh_global_control_summary() -> None:
+        config = active_global_config[0]
+        state = config.display if config.enabled else "OFF"
+        global_control_summary.set(f"CONTROL  {state}")
+
+    refresh_global_control_summary()
     tk.Label(
         control_card,
         text="MIC",
@@ -442,7 +752,13 @@ def run_windows_shell(
         devices = ()
         status.set("SPEECH UNAVAILABLE")
     default_microphone_label = "System default"
-    microphone = tk.StringVar(value=default_microphone_label)
+    initial_microphone = (
+        profiled_transcriber.profile.microphone
+        if profiled_transcriber is not None
+        and profiled_transcriber.profile.microphone in devices
+        else default_microphone_label
+    )
+    microphone = tk.StringVar(value=initial_microphone)
     microphone_picker = ttk.Combobox(
         control_card,
         textvariable=microphone,
@@ -451,8 +767,42 @@ def run_windows_shell(
         style="Console.TCombobox",
     )
     microphone_picker.grid(
-        row=0, column=1, columnspan=2, sticky="ew", padx=(0, 16), pady=(10, 5)
+        row=0, column=1, sticky="ew", padx=(0, 8), pady=(10, 5)
     )
+    speech_accuracy_button = tk.Button(
+        control_card,
+        text="ACCURACY",
+        command=lambda: open_speech_accuracy_settings(),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["purple"],
+        activeforeground=colors["text"],
+        disabledforeground=colors["faint"],
+        state="normal" if profiled_transcriber is not None else "disabled",
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+        pady=8,
+    )
+    speech_accuracy_button.grid(row=0, column=2, sticky="e", padx=(0, 8), pady=(10, 5))
+    global_control_button = tk.Button(
+        control_card,
+        textvariable=global_control_summary,
+        command=lambda: open_global_control_settings(),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["pink"],
+        activeforeground=colors["text"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+        pady=8,
+    )
+    global_control_button.grid(row=0, column=3, sticky="e", padx=(0, 16), pady=(10, 5))
 
     command_entry = tk.Entry(
         control_card,
@@ -470,6 +820,9 @@ def run_windows_shell(
     command_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(16, 8), pady=(7, 14), ipady=11)
 
     speech_results: SimpleQueue[TranscriptionResult | Exception] = SimpleQueue()
+    speech_active = [False]
+    continuous_listening = [False]
+    push_to_talk_held = [False]
 
     def set_status(message: str, tone: str = "ready") -> None:
         palettes = {
@@ -508,6 +861,9 @@ def run_windows_shell(
             else:
                 set_status("Ready")
         append_line("Assistant", response)
+        if command.casefold() == "stop listening":
+            stop_continuous_listening()
+        refresh_routine_selector()
 
     def submit(_event: object | None = None) -> None:
         command = command_entry.get().strip()
@@ -517,20 +873,44 @@ def run_windows_shell(
         command_entry.delete(0, "end")
         execute_command(command, "You")
 
-    def capture_speech() -> None:
+    def capture_speech(repeat: bool = False) -> None:
+        if speech_active[0]:
+            return
+        if repeat and transcriber.requires_manual_transcript():
+            continuous_listening[0] = False
+            append_line(
+                "Assistant",
+                "Continuous listening requires a microphone speech provider.",
+            )
+            set_status("Speech unavailable", "error")
+            return
         selected_device = microphone.get()
         try:
             transcriber.select_input_device(
                 selected_device if selected_device in devices else None
             )
-        except (ImportError, RuntimeError, ValueError) as error:
+        except (ImportError, OSError, RuntimeError, ValueError) as error:
             append_line("Assistant", f"Speech input unavailable: {error}")
             set_status("Speech unavailable", "error")
             return
 
-        voice_button.configure(state="disabled", background=colors["faint"])
+        speech_active[0] = True
+        if continuous_listening[0]:
+            voice_button.configure(
+                state="normal",
+                text="STOP LISTENING",
+                background=colors["pink"],
+            )
+        else:
+            voice_button.configure(state="disabled", background=colors["faint"])
         command_entry.configure(state="disabled")
-        set_status("Listening - speak one command", "working")
+        listening_message = (
+            "Listening continuously - press control to stop"
+            if continuous_listening[0]
+            else "Listening - speak one command"
+        )
+        set_status(listening_message, "working")
+        transcriber.prepare_capture()
 
         def worker() -> None:
             try:
@@ -540,6 +920,58 @@ def run_windows_shell(
 
         Thread(target=worker, daemon=True, name="voice-control-speech").start()
 
+    def stop_continuous_listening() -> None:
+        continuous_listening[0] = False
+        push_to_talk_held[0] = False
+        transcriber.stop_capture()
+        voice_button.configure(text="PUSH TO TALK", background=colors["cyan"])
+        if not speech_active[0]:
+            voice_button.configure(state="normal")
+            command_entry.configure(state="normal")
+            set_status("Ready")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
+
+    def toggle_continuous_listening() -> None:
+        if continuous_listening[0]:
+            stop_continuous_listening()
+            append_line("Assistant", "Continuous listening stopped.")
+            return
+        if transcriber.requires_manual_transcript():
+            append_line(
+                "Assistant",
+                "Continuous listening requires a microphone speech provider.",
+            )
+            set_status("Speech unavailable", "error")
+            return
+        continuous_listening[0] = True
+        append_line("Assistant", "Continuous listening started.")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
+        capture_speech(repeat=True)
+
+    def voice_button_action() -> None:
+        if continuous_listening[0]:
+            stop_continuous_listening()
+        else:
+            capture_speech()
+
+    def global_activation_press() -> None:
+        config = active_global_config[0]
+        if config.mode == TOGGLE_LISTENING:
+            toggle_continuous_listening()
+            return
+        if speech_active[0] or push_to_talk_held[0]:
+            return
+        push_to_talk_held[0] = True
+        capture_speech()
+
+    def global_activation_release() -> None:
+        if active_global_config[0].mode != PUSH_TO_TALK or not push_to_talk_held[0]:
+            return
+        push_to_talk_held[0] = False
+        transcriber.stop_capture()
+
     def poll_speech_result() -> None:
         try:
             result = speech_results.get_nowait()
@@ -547,30 +979,68 @@ def run_windows_shell(
             root.after(100, poll_speech_result)
             return
 
-        voice_button.configure(state="normal", background=colors["cyan"])
-        command_entry.configure(state="normal")
-        command_entry.focus_set()
+        speech_active[0] = False
         if isinstance(result, Exception):
             append_line("Assistant", record_speech_failure(app, result))
             set_status("Speech unavailable", "error")
+            continuous_listening[0] = False
         else:
             set_status("Processing speech", "working")
             root.update_idletasks()
-            dispatch = dispatch_transcription(app, result)
+            dispatch = dispatch_transcription(
+                app,
+                result,
+                speech_profile=(
+                    profiled_transcriber.profile
+                    if profiled_transcriber is not None
+                    else None
+                ),
+                correction_recorder=(
+                    profiled_transcriber.remember_correction
+                    if profiled_transcriber is not None
+                    else None
+                ),
+            )
             if dispatch.executed:
                 append_line("Voice", dispatch.transcript)
                 if dispatch.interpreted_text != dispatch.transcript:
                     append_line("Interpretation", dispatch.interpreted_text)
+                if dispatch.interpreted_text.casefold() == "stop listening":
+                    continuous_listening[0] = False
             append_line("Assistant", dispatch.message)
-            set_status("Ready")
+        if continuous_listening[0]:
+            voice_button.configure(
+                state="normal",
+                text="STOP LISTENING",
+                background=colors["pink"],
+            )
+            set_status("Listening continuously", "working")
+            root.after(180, lambda: capture_speech(repeat=True))
+        else:
+            voice_button.configure(
+                state="normal",
+                text="PUSH TO TALK",
+                background=colors["cyan"],
+            )
+            command_entry.configure(state="normal")
+            command_entry.focus_set()
+            if not isinstance(result, Exception):
+                set_status("Ready")
+        if tray_controller[0] is not None:
+            tray_controller[0].refresh()
         root.after(100, poll_speech_result)
 
     def poll_shutdown_request() -> None:
         if shutdown_requested is not None and shutdown_requested():
             set_status("Stopping safely for USB removal", "warning")
-            root.after(50, root.destroy)
+            root.after(50, close_app)
             return
         root.after(250, poll_shutdown_request)
+
+    def poll_show_window_request() -> None:
+        if show_window_requested is not None and show_window_requested():
+            show_window()
+        root.after(250, poll_show_window_request)
 
     run_button = tk.Button(
         control_card,
@@ -590,7 +1060,7 @@ def run_windows_shell(
     voice_button = tk.Button(
         control_card,
         text="PUSH TO TALK",
-        command=capture_speech,
+        command=voice_button_action,
         background=colors["cyan"],
         activebackground="#6ED0FA",
         foreground=colors["window"],
@@ -603,6 +1073,671 @@ def run_windows_shell(
         padx=17,
     )
     voice_button.grid(row=1, column=3, sticky="nsew", padx=(0, 16), pady=(7, 14))
+
+    def open_global_control_settings() -> None:
+        config = active_global_config[0]
+        dialog = tk.Toplevel(root)
+        dialog.title("Voice Control // Global Input")
+        dialog_width = 500
+        dialog_height = 500
+        root.update_idletasks()
+        dialog_x = root.winfo_rootx() + max(0, (root.winfo_width() - dialog_width) // 2)
+        dialog_y = root.winfo_rooty() + max(0, (root.winfo_height() - dialog_height) // 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_x}+{dialog_y}")
+        dialog.resizable(False, False)
+        dialog.configure(background=colors["window"])
+        dialog.transient(root)
+        dialog.grab_set()
+        _enable_dark_title_bar(dialog)
+
+        body = tk.Frame(dialog, background=colors["window"])
+        body.pack(fill="both", expand=True, padx=24, pady=22)
+        tk.Label(
+            body,
+            text="GLOBAL VOICE CONTROL",
+            background=colors["window"],
+            foreground=colors["text"],
+            font=("Segoe UI Semibold", 18),
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            text="Assign one keyboard key or mouse button. It works while Voice Control is hidden.",
+            background=colors["window"],
+            foreground=colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=420,
+            anchor="w",
+        ).pack(fill="x", pady=(5, 18))
+
+        enabled = tk.BooleanVar(value=config.enabled)
+        tk.Checkbutton(
+            body,
+            text="ENABLE GLOBAL CONTROL",
+            variable=enabled,
+            background=colors["window"],
+            activebackground=colors["window"],
+            foreground=colors["teal"],
+            activeforeground=colors["teal"],
+            selectcolor=colors["card"],
+            font=("Consolas", 9, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 14))
+
+        tk.Label(
+            body,
+            text="ASSIGNED INPUT",
+            background=colors["window"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        binding_text = tk.StringVar(value=config.display)
+        binding = [config.input_type, config.code, config.display]
+        binding_card = tk.Label(
+            body,
+            textvariable=binding_text,
+            background=colors["card"],
+            foreground=colors["pink"],
+            font=("Consolas", 15, "bold"),
+            anchor="center",
+            pady=13,
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        binding_card.pack(fill="x", pady=(5, 8))
+        capture_status = tk.StringVar(value="")
+
+        def apply_capture(input_type: str, code: str, display: str) -> None:
+            if not dialog.winfo_exists():
+                return
+            binding[:] = [input_type, code, display]
+            binding_text.set(display)
+            capture_status.set("INPUT CAPTURED")
+
+        def capture_input() -> None:
+            controller = input_controller[0]
+            if controller is None:
+                capture_status.set("GLOBAL INPUT SERVICE IS UNAVAILABLE")
+                return
+            capture_status.set("PRESS ANY KEY OR MOUSE BUTTON...")
+            controller.capture_next(
+                lambda input_type, code, display: root.after(
+                    0,
+                    lambda: apply_capture(input_type, code, display),
+                )
+            )
+
+        tk.Button(
+            body,
+            text="CAPTURE KEY / MOUSE",
+            command=capture_input,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["cyan"],
+            activeforeground=colors["text"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            pady=9,
+        ).pack(fill="x")
+        tk.Label(
+            body,
+            textvariable=capture_status,
+            background=colors["window"],
+            foreground=colors["amber"],
+            font=("Consolas", 8, "bold"),
+        ).pack(fill="x", pady=(5, 10))
+
+        tk.Label(
+            body,
+            text="ACTIVATION MODE",
+            background=colors["window"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        selected_mode = tk.StringVar(value=mode_label(config.mode))
+        mode_picker = ttk.Combobox(
+            body,
+            textvariable=selected_mode,
+            values=(mode_label(PUSH_TO_TALK), mode_label(TOGGLE_LISTENING)),
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        mode_picker.pack(fill="x", pady=(5, 16))
+
+        controls = tk.Frame(body, background=colors["window"])
+        controls.pack(fill="x", side="bottom")
+
+        def close_dialog() -> None:
+            if input_controller[0] is not None:
+                input_controller[0].cancel_capture()
+            dialog.grab_release()
+            dialog.destroy()
+
+        def save_control() -> None:
+            mode = (
+                PUSH_TO_TALK
+                if selected_mode.get() == mode_label(PUSH_TO_TALK)
+                else TOGGLE_LISTENING
+            )
+            try:
+                updated = global_control_store.save(
+                    GlobalControlConfig(
+                        enabled=enabled.get(),
+                        input_type=binding[0],
+                        code=binding[1],
+                        display=binding[2],
+                        mode=mode,
+                    )
+                )
+            except (OSError, RuntimeError, ValueError) as error:
+                capture_status.set(str(error).upper())
+                return
+            active_global_config[0] = updated
+            if input_controller[0] is not None:
+                input_controller[0].update(updated)
+            refresh_global_control_summary()
+            if tray_controller[0] is not None:
+                tray_controller[0].refresh()
+            append_line(
+                "Assistant",
+                f"Global control saved: {updated.display} / {mode_label(updated.mode)}.",
+            )
+            close_dialog()
+
+        tk.Button(
+            controls,
+            text="CANCEL",
+            command=close_dialog,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=9,
+        ).pack(side="left")
+        tk.Button(
+            controls,
+            text="SAVE CONTROL",
+            command=save_control,
+            background=colors["teal"],
+            activebackground="#4BE2BD",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 9, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=9,
+        ).pack(side="right")
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
+
+    def open_speech_accuracy_settings() -> None:
+        controller = profiled_transcriber
+        if controller is None:
+            append_line("Assistant", "Speech Accuracy is unavailable for this speech provider.")
+            return
+        original_profile = controller.profile
+        dialog = tk.Toplevel(root)
+        dialog.title("Voice Control // Speech Accuracy")
+        dialog_width = 720
+        dialog_height = 760
+        root.update_idletasks()
+        dialog_x = root.winfo_rootx() + max(0, (root.winfo_width() - dialog_width) // 2)
+        dialog_y = root.winfo_rooty() + max(0, (root.winfo_height() - dialog_height) // 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_x}+{dialog_y}")
+        dialog.minsize(660, 700)
+        dialog.configure(background=colors["window"])
+        dialog.transient(root)
+        dialog.grab_set()
+        _enable_dark_title_bar(dialog)
+
+        body = tk.Frame(dialog, background=colors["window"])
+        body.pack(fill="both", expand=True, padx=24, pady=20)
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(8, weight=1)
+
+        tk.Label(
+            body,
+            text="SPEECH ACCURACY",
+            background=colors["window"],
+            foreground=colors["text"],
+            font=("Segoe UI Semibold", 18),
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew")
+        tk.Label(
+            body,
+            text=(
+                "Choose the recognizer, test your microphone, and teach repeatable corrections. "
+                "Audio stays local and is not saved."
+            ),
+            background=colors["window"],
+            foreground=colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=650,
+            anchor="w",
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 16))
+
+        provider_labels = {
+            WINDOWS_SAPI: "Windows Offline (fast)",
+            LOCAL_WHISPER: "Local Whisper (accurate)",
+        }
+        providers_by_label = {label: value for value, label in provider_labels.items()}
+        provider = tk.StringVar(value=provider_labels[original_profile.provider])
+        locale = tk.StringVar(value=original_profile.locale)
+        model = tk.StringVar(value=original_profile.model)
+        selected_microphone = tk.StringVar(
+            value=original_profile.microphone or default_microphone_label
+        )
+        threshold = tk.DoubleVar(value=round(original_profile.confidence_threshold * 100))
+        command_matching = tk.BooleanVar(value=original_profile.command_matching)
+        corrections = dict(original_profile.corrections)
+        test_status = tk.StringVar(value="READY")
+        test_queue: SimpleQueue[TranscriptionResult | Exception] = SimpleQueue()
+        testing = [False]
+        applied_preview = [False]
+
+        def field_label(text: str, row: int, column: int) -> None:
+            tk.Label(
+                body,
+                text=text,
+                background=colors["window"],
+                foreground=colors["faint"],
+                font=("Consolas", 8, "bold"),
+                anchor="w",
+            ).grid(row=row, column=column, sticky="ew", padx=(0, 8), pady=(0, 4))
+
+        field_label("RECOGNIZER", 2, 0)
+        field_label("LANGUAGE / ACCENT", 2, 1)
+        provider_picker = ttk.Combobox(
+            body,
+            textvariable=provider,
+            values=tuple(provider_labels.values()),
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        provider_picker.grid(row=3, column=0, sticky="ew", padx=(0, 8))
+        locale_picker = ttk.Combobox(
+            body,
+            textvariable=locale,
+            values=SUPPORTED_LOCALES,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        locale_picker.grid(row=3, column=1, sticky="ew", padx=(8, 0))
+
+        field_label("MICROPHONE", 4, 0)
+        field_label("LOCAL MODEL", 4, 1)
+        microphone_settings_picker = ttk.Combobox(
+            body,
+            textvariable=selected_microphone,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        microphone_settings_picker.grid(row=5, column=0, sticky="ew", padx=(0, 8))
+        model_picker = ttk.Combobox(
+            body,
+            textvariable=model,
+            values=SUPPORTED_MODELS,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        model_picker.grid(row=5, column=1, sticky="ew", padx=(8, 0))
+
+        safety = tk.Frame(
+            body,
+            background=colors["panel"],
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        safety.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(16, 12))
+        safety.grid_columnconfigure(1, weight=1)
+        tk.Label(
+            safety,
+            text="MINIMUM CONFIDENCE",
+            background=colors["panel"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=14, pady=(12, 3))
+        confidence_text = tk.StringVar()
+
+        def refresh_threshold(*_args: object) -> None:
+            confidence_text.set(f"{round(threshold.get())}%")
+
+        tk.Label(
+            safety,
+            textvariable=confidence_text,
+            background=colors["panel"],
+            foreground=colors["amber"],
+            font=("Consolas", 9, "bold"),
+        ).grid(row=0, column=2, sticky="e", padx=14, pady=(12, 3))
+        confidence_scale = tk.Scale(
+            safety,
+            variable=threshold,
+            from_=0,
+            to=90,
+            orient="horizontal",
+            showvalue=False,
+            resolution=1,
+            command=lambda _value: refresh_threshold(),
+            background=colors["panel"],
+            foreground=colors["text"],
+            troughcolor=colors["card"],
+            activebackground=colors["cyan"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        confidence_scale.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10)
+        tk.Checkbutton(
+            safety,
+            text="RECOVER CLEARLY MATCHING SAFE COMMANDS",
+            variable=command_matching,
+            background=colors["panel"],
+            activebackground=colors["panel"],
+            foreground=colors["teal"],
+            activeforeground=colors["teal"],
+            selectcolor=colors["card"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=(3, 10))
+        refresh_threshold()
+
+        corrections_card = tk.Frame(
+            body,
+            background=colors["panel"],
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        corrections_card.grid(row=8, column=0, columnspan=2, sticky="nsew")
+        corrections_card.grid_columnconfigure(0, weight=1)
+        corrections_card.grid_columnconfigure(1, weight=1)
+        corrections_card.grid_rowconfigure(2, weight=1)
+        tk.Label(
+            corrections_card,
+            text="PERSONAL CORRECTIONS  //  WHAT IT HEARD → WHAT YOU MEANT",
+            background=colors["panel"],
+            foreground=colors["purple"],
+            font=("Consolas", 9, "bold"),
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=(12, 8))
+        heard = tk.StringVar()
+        intended = tk.StringVar()
+        heard_entry = tk.Entry(
+            corrections_card,
+            textvariable=heard,
+            background=colors["card"],
+            foreground=colors["text"],
+            insertbackground=colors["cyan"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+        )
+        heard_entry.grid(row=1, column=0, sticky="ew", padx=(14, 5), pady=(0, 8), ipady=7)
+        intended_entry = tk.Entry(
+            corrections_card,
+            textvariable=intended,
+            background=colors["card"],
+            foreground=colors["text"],
+            insertbackground=colors["teal"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+        )
+        intended_entry.grid(row=1, column=1, sticky="ew", padx=(5, 14), pady=(0, 8), ipady=7)
+        correction_list = tk.Listbox(
+            corrections_card,
+            background=colors["card"],
+            foreground=colors["text"],
+            selectbackground=colors["purple"],
+            selectforeground=colors["window"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+            activestyle="none",
+        )
+        correction_list.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=14)
+
+        def render_corrections() -> None:
+            correction_list.delete(0, "end")
+            for source, target in sorted(corrections.items()):
+                correction_list.insert("end", f"{source}  →  {target}")
+
+        def select_correction(_event: object | None = None) -> None:
+            selection = correction_list.curselection()
+            if not selection:
+                return
+            source = sorted(corrections)[selection[0]]
+            heard.set(source)
+            intended.set(corrections[source])
+
+        correction_list.bind("<<ListboxSelect>>", select_correction)
+        render_corrections()
+
+        correction_controls = tk.Frame(corrections_card, background=colors["panel"])
+        correction_controls.grid(row=3, column=0, columnspan=2, sticky="ew", padx=11, pady=10)
+
+        def add_correction() -> None:
+            source = " ".join(heard.get().strip().split())
+            target = " ".join(intended.get().strip().split())
+            if not source or not target:
+                test_status.set("ENTER BOTH PHRASES")
+                return
+            if app.parser.parse(target).command is None:
+                test_status.set("INTENDED PHRASE IS NOT A SUPPORTED COMMAND")
+                return
+            corrections[source.casefold()] = target
+            heard.set("")
+            intended.set("")
+            render_corrections()
+            test_status.set("CORRECTION READY TO SAVE")
+
+        def remove_correction() -> None:
+            selection = correction_list.curselection()
+            if not selection:
+                test_status.set("SELECT A CORRECTION FIRST")
+                return
+            source = sorted(corrections)[selection[0]]
+            corrections.pop(source, None)
+            heard.set("")
+            intended.set("")
+            render_corrections()
+            test_status.set("CORRECTION REMOVED")
+
+        for label, callback in (("ADD / UPDATE", add_correction), ("REMOVE", remove_correction)):
+            tk.Button(
+                correction_controls,
+                text=label,
+                command=callback,
+                background=colors["card"],
+                activebackground=colors["border"],
+                foreground=colors["cyan"],
+                activeforeground=colors["text"],
+                font=("Consolas", 8, "bold"),
+                relief="flat",
+                borderwidth=0,
+                padx=10,
+                pady=6,
+            ).pack(side="left", padx=3)
+
+        status_row = tk.Frame(body, background=colors["window"])
+        status_row.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        status_row.grid_columnconfigure(0, weight=1)
+        tk.Label(
+            status_row,
+            textvariable=test_status,
+            background=colors["window"],
+            foreground=colors["amber"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+            wraplength=430,
+        ).grid(row=0, column=0, sticky="ew")
+
+        def profile_from_form() -> SpeechProfile:
+            return SpeechProfile.from_dict(
+                {
+                    "provider": providers_by_label[provider.get()],
+                    "microphone": (
+                        ""
+                        if selected_microphone.get() == default_microphone_label
+                        else selected_microphone.get()
+                    ),
+                    "locale": locale.get(),
+                    "model": model.get(),
+                    "confidence_threshold": threshold.get() / 100.0,
+                    "command_matching": command_matching.get(),
+                    "corrections": corrections,
+                }
+            )
+
+        def refresh_microphones(_event: object | None = None) -> None:
+            try:
+                preview = profile_from_form()
+                available = controller.available_input_devices_for(preview)
+            except (ImportError, RuntimeError, ValueError) as error:
+                microphone_settings_picker.configure(values=(default_microphone_label,))
+                selected_microphone.set(default_microphone_label)
+                test_status.set(str(error).upper())
+                return
+            microphone_settings_picker.configure(values=(default_microphone_label, *available))
+            if selected_microphone.get() not in available:
+                selected_microphone.set(default_microphone_label)
+            model_picker.configure(
+                state="readonly" if preview.provider == LOCAL_WHISPER else "disabled"
+            )
+            test_status.set("MICROPHONES REFRESHED")
+
+        provider_picker.bind("<<ComboboxSelected>>", refresh_microphones)
+
+        def poll_test_result() -> None:
+            try:
+                result = test_queue.get_nowait()
+            except Empty:
+                if testing[0] and dialog.winfo_exists():
+                    dialog.after(100, poll_test_result)
+                return
+            testing[0] = False
+            if isinstance(result, Exception):
+                test_status.set(f"TEST FAILED: {result}".upper())
+                return
+            heard.set(result.text)
+            confidence = (
+                "unknown"
+                if result.confidence is None
+                else f"{round(result.confidence * 100)}%"
+            )
+            test_status.set(
+                f"HEARD: {result.text or '[silence]'}  //  CONFIDENCE: {confidence}".upper()
+            )
+
+        def test_microphone() -> None:
+            if testing[0]:
+                return
+            try:
+                preview = profile_from_form()
+                controller.configure(preview, persist=False)
+            except (ImportError, RuntimeError, ValueError) as error:
+                test_status.set(str(error).upper())
+                return
+            applied_preview[0] = True
+            testing[0] = True
+            test_status.set(
+                "LISTENING — SAY A COMMAND. FIRST LOCAL WHISPER TEST MAY DOWNLOAD THE MODEL."
+            )
+            controller.prepare_capture()
+
+            def worker() -> None:
+                try:
+                    test_queue.put(controller.transcribe_result("record 8"))
+                except Exception as error:
+                    test_queue.put(error)
+
+            Thread(target=worker, daemon=True, name="voice-control-speech-test").start()
+            dialog.after(100, poll_test_result)
+
+        def close_accuracy(*, restore: bool) -> None:
+            controller.stop_capture()
+            if restore and applied_preview[0]:
+                try:
+                    controller.configure(original_profile, persist=False)
+                except (ImportError, RuntimeError, ValueError):
+                    pass
+            if dialog.winfo_exists():
+                dialog.grab_release()
+                dialog.destroy()
+
+        def save_accuracy() -> None:
+            nonlocal devices
+            try:
+                updated = profile_from_form()
+                controller.configure(updated, persist=True)
+                available = controller.available_input_devices()
+            except (ImportError, OSError, RuntimeError, ValueError) as error:
+                test_status.set(str(error).upper())
+                return
+            devices = available
+            microphone_picker.configure(values=(default_microphone_label, *available))
+            microphone.set(updated.microphone or default_microphone_label)
+            append_line(
+                "Assistant",
+                f"Speech Accuracy saved: {provider_labels[updated.provider]}, "
+                f"{updated.locale}, {len(updated.corrections)} personal corrections.",
+            )
+            close_accuracy(restore=False)
+
+        tk.Button(
+            status_row,
+            text="TEST MICROPHONE",
+            command=test_microphone,
+            background=colors["purple"],
+            activebackground="#B9A5FB",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=1, padx=(8, 0))
+        tk.Button(
+            status_row,
+            text="CANCEL",
+            command=lambda: close_accuracy(restore=True),
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=2, padx=(8, 0))
+        tk.Button(
+            status_row,
+            text="SAVE & APPLY",
+            command=save_accuracy,
+            background=colors["teal"],
+            activebackground="#4BE2BD",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=3, padx=(8, 0))
+        refresh_microphones()
+        test_status.set("READY — TEST A COMMAND OR ADD A KNOWN MISHEARING")
+        dialog.protocol("WM_DELETE_WINDOW", lambda: close_accuracy(restore=True))
 
     tk.Label(
         main,
@@ -620,6 +1755,267 @@ def run_windows_shell(
         command_entry.focus_set()
         command_entry.selection_range(0, "end")
         set_status("Example loaded", "working")
+
+    def toggle_routine_panel(visible: bool | None = None) -> None:
+        show = not routine_panel_visible[0] if visible is None else visible
+        if show:
+            routine_panel.grid()
+            root.geometry("1520x820")
+        else:
+            routine_panel.grid_remove()
+            root.geometry("1180x760")
+        routine_panel_visible[0] = show
+
+    def routine_failure(error: Exception | str) -> None:
+        message = str(error)
+        set_status("Routine needs attention", "error")
+        append_line("Assistant", message)
+
+    def refresh_routine_selector(selected_name: str | None = None) -> None:
+        routines = app.routines.list()
+        names = tuple(routine.name for routine in routines)
+        routine_selector.configure(values=names)
+        desired = selected_name or current_routine.get()
+        if desired not in names:
+            desired = names[0] if names else ""
+        current_routine.set(desired)
+        if desired:
+            routine_name.set(desired)
+        render_routine_steps()
+
+    def select_routine() -> None:
+        selected_step[0] = -1
+        routine_name.set(current_routine.get())
+        render_routine_steps()
+
+    def create_routine() -> None:
+        try:
+            routine = app.routines.create(routine_name.get())
+        except (RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        refresh_routine_selector(routine.name)
+        set_status("Routine created")
+
+    def rename_routine() -> None:
+        if not current_routine.get():
+            routine_failure("Create or select a routine first.")
+            return
+        try:
+            routine = app.routines.rename(current_routine.get(), routine_name.get())
+        except (RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        refresh_routine_selector(routine.name)
+        set_status("Routine renamed")
+
+    def prepare_delete_routine() -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine first.")
+            return
+        load_command(f"delete routine {name}")
+        set_status("Delete loaded - run to review", "warning")
+
+    def run_selected_routine() -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine first.")
+            return
+        execute_command(f"start {name} routine", "Routine")
+
+    def add_loaded_command() -> None:
+        command = command_entry.get().strip()
+        if not command:
+            routine_failure("Load or type a command first.")
+            return
+        add_command_to_routine(command)
+
+    def add_command_to_routine(command: str, index: int | None = None) -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine before adding commands.")
+            return
+        try:
+            app.routines.add_command(name, command, index=index)
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        render_routine_steps()
+        set_status("Routine step added")
+
+    def select_step_at(index: int) -> None:
+        routine = app.routines.get(current_routine.get())
+        if routine is None or not 0 <= index < len(routine.commands):
+            return
+        selected_step[0] = index
+        step_editor.delete(0, "end")
+        step_editor.insert(0, routine.commands[index])
+        render_routine_steps()
+
+    def update_selected_step() -> None:
+        if selected_step[0] < 0:
+            routine_failure("Select a routine step first.")
+            return
+        try:
+            app.routines.update_command(
+                current_routine.get(),
+                selected_step[0],
+                step_editor.get(),
+            )
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        render_routine_steps()
+        set_status("Routine step updated")
+
+    def remove_selected_step() -> None:
+        if selected_step[0] < 0:
+            routine_failure("Select a routine step first.")
+            return
+        try:
+            app.routines.remove_command(current_routine.get(), selected_step[0])
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        selected_step[0] = -1
+        step_editor.delete(0, "end")
+        render_routine_steps()
+        set_status("Routine step removed")
+
+    def move_selected_step(delta: int) -> None:
+        routine = app.routines.get(current_routine.get())
+        index = selected_step[0]
+        if routine is None or not 0 <= index < len(routine.commands):
+            routine_failure("Select a routine step first.")
+            return
+        target = max(0, min(len(routine.commands) - 1, index + delta))
+        if target == index:
+            return
+        app.routines.move_command(routine.name, index, target)
+        selected_step[0] = target
+        render_routine_steps()
+        set_status("Routine order updated")
+
+    def begin_step_drag(event: tk.Event[tk.Misc], index: int) -> None:
+        drag_payload.clear()
+        drag_payload.update(kind="step", index=index, start_x=event.x_root)
+        select_step_at(index)
+
+    def finish_step_drag(event: tk.Event[tk.Misc], index: int) -> None:
+        if drag_payload.get("kind") != "step":
+            return
+        source_index = int(drag_payload.get("index", index))
+        start_x = int(drag_payload.get("start_x", event.x_root))
+        if abs(event.x_root - start_x) < 8:
+            drag_payload.clear()
+            select_step_at(source_index)
+            return
+        cards = routine_steps.winfo_children()
+        if not cards:
+            drag_payload.clear()
+            return
+        target = min(
+            range(len(cards)),
+            key=lambda item: abs(
+                event.x_root
+                - (cards[item].winfo_rootx() + cards[item].winfo_width() // 2)
+            ),
+        )
+        drag_payload.clear()
+        app.routines.move_command(current_routine.get(), source_index, target)
+        selected_step[0] = target
+        render_routine_steps()
+        set_status("Routine order updated")
+
+    def render_routine_steps() -> None:
+        for child in routine_steps.winfo_children():
+            child.destroy()
+        routine = app.routines.get(current_routine.get())
+        commands = () if routine is None else routine.commands
+        routine_step_count.set(f"{len(commands):02d} STEPS")
+        if not commands:
+            tk.Label(
+                routine_steps,
+                text="DROP COMMANDS HERE\n\nCreate a routine, then drag command cards\nfrom the left deck into this lane.",
+                background=colors["sidebar"],
+                foreground=colors["faint"],
+                font=("Consolas", 9),
+                justify="left",
+                anchor="nw",
+            ).pack(side="left", anchor="n", padx=10, pady=12)
+            routine_lane.configure(scrollregion=routine_lane.bbox("all"))
+            return
+        for index, command in enumerate(commands):
+            selected = index == selected_step[0]
+            card = tk.Frame(
+                routine_steps,
+                width=176,
+                height=190,
+                background=colors["card_hover"] if selected else colors["card"],
+                highlightbackground=colors["pink"] if selected else colors["border"],
+                highlightthickness=2 if selected else 1,
+                cursor="fleur",
+            )
+            card.pack(side="left", anchor="n", padx=(0, 9), pady=4)
+            card.pack_propagate(False)
+            number = tk.Label(
+                card,
+                text=f"STEP {index + 1:02d}",
+                background=card.cget("background"),
+                foreground=colors["pink"],
+                font=("Consolas", 8, "bold"),
+                anchor="w",
+            )
+            number.pack(fill="x", padx=11, pady=(11, 8))
+            phrase = tk.Label(
+                card,
+                text=command,
+                background=card.cget("background"),
+                foreground=colors["text"],
+                font=("Consolas", 9, "bold"),
+                justify="left",
+                anchor="nw",
+                wraplength=150,
+                cursor="fleur",
+            )
+            phrase.pack(fill="both", expand=True, padx=11, pady=(0, 10))
+            for widget in (card, number, phrase):
+                widget.bind(
+                    "<ButtonPress-1>",
+                    lambda event, step=index: begin_step_drag(event, step),
+                )
+                widget.bind(
+                    "<ButtonRelease-1>",
+                    lambda event, step=index: finish_step_drag(event, step),
+                )
+        routine_lane.configure(scrollregion=routine_lane.bbox("all"))
+
+    def begin_command_drag(event: tk.Event[tk.Misc], example: str) -> None:
+        drag_payload.clear()
+        drag_payload.update(
+            kind="command",
+            command=example,
+            start_x=event.x_root,
+            start_y=event.y_root,
+        )
+
+    def finish_command_drag(event: tk.Event[tk.Misc], example: str) -> None:
+        start_x = int(drag_payload.get("start_x", event.x_root))
+        start_y = int(drag_payload.get("start_y", event.y_root))
+        moved = abs(event.x_root - start_x) + abs(event.y_root - start_y) >= 8
+        lane_left = routine_lane.winfo_rootx()
+        lane_top = routine_lane.winfo_rooty()
+        over_lane = (
+            routine_panel_visible[0]
+            and lane_left <= event.x_root <= lane_left + routine_lane.winfo_width()
+            and lane_top <= event.y_root <= lane_top + routine_lane.winfo_height()
+        )
+        drag_payload.clear()
+        if moved and over_lane:
+            add_command_to_routine(example)
+        elif not moved:
+            load_command(example)
 
     def bind_legend_scroll(widget: tk.Misc) -> None:
         widget.bind(
@@ -679,38 +2075,31 @@ def run_windows_shell(
                     cursor="hand2",
                 )
                 phrase.grid(row=0, column=0, sticky="ew", padx=(11, 5), pady=(9, 2))
+                card_widgets: list[tk.Misc] = [card, phrase]
                 if command.badge:
                     badge_color = (
                         colors["danger"]
                         if command.badge == "BLOCKED"
                         else colors["amber"]
                     )
-                    tk.Label(
+                    badge = tk.Label(
                         card,
                         text=command.badge,
                         background=colors["card"],
                         foreground=badge_color,
                         font=("Consolas", 7, "bold"),
-                    ).grid(row=0, column=1, sticky="ne", padx=(2, 9), pady=(10, 0))
-                description = tk.Label(
-                    card,
-                    text=command.description,
-                    background=colors["card"],
-                    foreground=colors["muted"],
-                    font=("Segoe UI", 8),
-                    anchor="w",
-                    justify="left",
-                    wraplength=285,
-                    cursor="hand2",
-                )
-                description.grid(
-                    row=1, column=0, columnspan=2, sticky="ew", padx=11, pady=(0, 9)
-                )
-                widgets = (card, phrase, description)
-                for widget in widgets:
+                    )
+                    badge.grid(row=0, column=1, sticky="ne", padx=(2, 9), pady=(10, 0))
+                    card_widgets.append(badge)
+                phrase.grid_configure(pady=(10, 10))
+                for widget in card_widgets:
                     widget.bind(
-                        "<Button-1>",
-                        lambda _event, example=command.example: load_command(example),
+                        "<ButtonPress-1>",
+                        lambda event, example=command.example: begin_command_drag(event, example),
+                    )
+                    widget.bind(
+                        "<ButtonRelease-1>",
+                        lambda event, example=command.example: finish_command_drag(event, example),
                     )
                     bind_legend_scroll(widget)
         legend_canvas.yview_moveto(0)
@@ -752,14 +2141,94 @@ def run_windows_shell(
         categories.grid_columnconfigure(index % 3, weight=1)
         category_buttons[name] = button
 
+    def show_window() -> None:
+        if closing[0]:
+            return
+        root.deiconify()
+        root.state("normal")
+        root.lift()
+        root.focus_force()
+        command_entry.focus_set()
+
+    def close_app() -> None:
+        if closing[0]:
+            return
+        closing[0] = True
+        continuous_listening[0] = False
+        transcriber.stop_capture()
+        if input_controller[0] is not None:
+            input_controller[0].stop()
+            input_controller[0] = None
+        if tray_controller[0] is not None:
+            tray_controller[0].stop()
+            tray_controller[0] = None
+        root.destroy()
+
+    def hide_window() -> None:
+        if tray_available[0]:
+            root.withdraw()
+        else:
+            close_app()
+
+    def tray_status_text() -> str:
+        if continuous_listening[0]:
+            return "Listening: ON"
+        config = active_global_config[0]
+        if not config.enabled:
+            return "Global control: OFF"
+        return f"{config.display} / {mode_label(config.mode)}"
+
+    controller = GlobalInputController(
+        active_global_config[0],
+        on_activation_press=lambda: root.after(0, global_activation_press),
+        on_activation_release=lambda: root.after(0, global_activation_release),
+    )
+    try:
+        controller.start()
+    except (ImportError, OSError, RuntimeError) as error:
+        startup_messages.append(f"Global input controls unavailable: {error}")
+    else:
+        input_controller[0] = controller
+
+    try:
+        tray = TrayController(
+            on_open=lambda: root.after(0, show_window),
+            on_exit=lambda: root.after(0, close_app),
+            status_text=tray_status_text,
+        )
+        tray.start()
+    except (ImportError, OSError, RuntimeError) as error:
+        startup_messages.append(f"Tray icon unavailable: {error}")
+    else:
+        tray_controller[0] = tray
+        tray_available[0] = True
+
+    root.protocol("WM_DELETE_WINDOW", hide_window)
     search_query.trace_add("write", render_legend)
+    refresh_routine_selector()
     choose_category("All")
     append_line(
         "Assistant",
-        "Console online. Choose a command from the deck, type one below, or push to talk.",
+        "Console online. Choose a command from the deck, type one below, or use voice control.",
     )
+    for startup_message in startup_messages:
+        append_line("Assistant", startup_message)
     command_entry.bind("<Return>", submit)
     command_entry.focus_set()
     root.after(100, poll_speech_result)
     root.after(250, poll_shutdown_request)
-    root.mainloop()
+    root.after(250, poll_show_window_request)
+    if start_minimized and tray_available[0]:
+        root.withdraw()
+    elif start_minimized:
+        append_line(
+            "Assistant",
+            "The tray icon is unavailable, so the command window remained open.",
+        )
+    try:
+        root.mainloop()
+    finally:
+        if input_controller[0] is not None:
+            input_controller[0].stop()
+        if tray_controller[0] is not None:
+            tray_controller[0].stop()

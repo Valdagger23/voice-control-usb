@@ -13,6 +13,7 @@ from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
+    ShowWindowRequestMonitor,
     ShutdownRequestMonitor,
     inspect_instance_lock,
     package_root,
@@ -37,6 +38,22 @@ class RuntimeSupportTests(unittest.TestCase):
             self.assertEqual(
                 runtime_paths.audit_path,
                 (usb_root / "runtime" / "audit" / "events.jsonl").resolve(),
+            )
+            self.assertEqual(
+                runtime_paths.global_controls_path,
+                (usb_root / "runtime" / "global-controls.json").resolve(),
+            )
+            self.assertEqual(
+                runtime_paths.show_window_request_path,
+                (usb_root / "runtime" / "show-window.request").resolve(),
+            )
+            self.assertEqual(
+                runtime_paths.speech_profile_path,
+                (usb_root / "runtime" / "speech-profile.json").resolve(),
+            )
+            self.assertEqual(
+                runtime_paths.speech_model_root,
+                (usb_root / "models" / "faster-whisper").resolve(),
             )
 
     def test_assistant_runtime_paths_reject_missing_usb_root(self) -> None:
@@ -112,6 +129,18 @@ class RuntimeSupportTests(unittest.TestCase):
             request_path.write_text("{}", encoding="utf-8")
             monitor = ShutdownRequestMonitor(request_path)
 
+            self.assertTrue(monitor.requested())
+            self.assertFalse(request_path.exists())
+            self.assertFalse(monitor.requested())
+
+    def test_show_window_monitor_sends_and_consumes_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            request_path = Path(tmp_dir) / "runtime" / "show-window.request"
+            monitor = ShowWindowRequestMonitor(request_path)
+
+            monitor.request()
+
+            self.assertTrue(request_path.is_file())
             self.assertTrue(monitor.requested())
             self.assertFalse(request_path.exists())
             self.assertFalse(monitor.requested())

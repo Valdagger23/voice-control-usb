@@ -26,7 +26,13 @@ class SpotifyOAuthTests(unittest.TestCase):
         self.assertNotEqual(query["code_challenge"], [request.code_verifier])
         self.assertEqual(
             set(query["scope"][0].split()),
-            {"user-read-playback-state", "user-modify-playback-state"},
+            {
+                "user-read-playback-state",
+                "user-modify-playback-state",
+                "user-library-modify",
+                "playlist-read-private",
+                "playlist-modify-private",
+            },
         )
 
     def test_code_exchange_persists_only_refresh_token_through_store(self) -> None:

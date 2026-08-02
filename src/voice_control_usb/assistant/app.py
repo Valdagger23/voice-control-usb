@@ -19,12 +19,14 @@ from voice_control_usb.core.proposals import ProposalStore
 from voice_control_usb.core.safety import SafetyClass, SafetyPolicy
 from voice_control_usb.core.session_context import PendingAction, SessionContext
 from voice_control_usb.core.workflows import WorkflowRegistry
+from voice_control_usb.core.user_routines import UserRoutineStore
 from voice_control_usb.desktop.adapter import DesktopAdapter, StubDesktopAdapter
 from voice_control_usb.discord.adapter import DiscordAdapter, StubDiscordAdapter
 from voice_control_usb.desktop.registry import AppAliasRegistry
 from voice_control_usb.excel.adapter import ExcelAdapter, StubExcelAdapter
 from voice_control_usb.executor.engine import ExecutionEngine
 from voice_control_usb.media.adapter import MediaAdapter, StubMediaAdapter
+from voice_control_usb.spotify.adapter import SpotifyAdapter, StubSpotifyAdapter
 
 class AssistantApp:
     """Glue parser, executor, and proposal logging together."""
@@ -39,13 +41,16 @@ class AssistantApp:
         media: MediaAdapter | None = None,
         browser: BrowserAdapter | None = None,
         discord: DiscordAdapter | None = None,
+        spotify: SpotifyAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
         pending_action_timeout_seconds: float | None = None,
         clock: Callable[[], float] | None = None,
         audit_store: AuditStore | None = None,
         session_context: SessionContext | None = None,
+        routine_path: Path | None = None,
     ) -> None:
         self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
+        self.routines = UserRoutineStore(routine_path)
         self.parser = CommandParser()
         self.executor = ExecutionEngine(
             excel=excel or StubExcelAdapter(),
@@ -53,14 +58,24 @@ class AssistantApp:
             media=media or StubMediaAdapter(),
             browser=browser or StubBrowserAdapter(),
             discord=discord or StubDiscordAdapter(),
+            spotify=spotify or StubSpotifyAdapter(),
+            user_routines=self.routines,
             workflow_registry=self.workflow_registry,
         )
-        self.safety = SafetyPolicy(self.workflow_registry, self.executor.registry)
+        self.safety = SafetyPolicy(
+            self.workflow_registry,
+            self.executor.registry,
+            user_routines=self.routines,
+        )
         self.proposals = ProposalStore(proposal_path)
         self.audit = audit_store or JsonlAuditStore(proposal_path.with_name("audit.jsonl"))
         self.pending_action_timeout_seconds = pending_action_timeout_seconds
         self.clock = clock or monotonic
         self.context = session_context or SessionContext()
+        self.last_input_text = ""
+        self.last_response = ""
+        self.last_command_text = ""
+        self.last_undo_available = False
 
     @property
     def pending_action(self) -> PendingAction | None:
@@ -78,6 +93,18 @@ class AssistantApp:
         if parsed.command:
             command = parsed.command
             decision = self.safety.classify(command)
+            previous_input = self.last_input_text
+            if command.action != "report_last_input":
+                self.last_input_text = command.source_text
+
+            meta_response = self._handle_meta_command(command, previous_input)
+            if meta_response is not None:
+                return self._record_response(
+                    command,
+                    decision.safety_class,
+                    AuditOutcome.STATUS,
+                    meta_response,
+                )
             if command.action == "report_status":
                 message = self._status_message(expired_action)
                 return self._record_response(
@@ -112,6 +139,7 @@ class AssistantApp:
                     )
                     raise
                 self.pending_action = None
+                self._remember_success(pending.command)
                 return self._record_response(
                     command,
                     decision.safety_class,
@@ -181,6 +209,7 @@ class AssistantApp:
                     str(error),
                 )
                 raise
+            self._remember_success(command)
             return self._record_response(
                 command,
                 decision.safety_class,
@@ -192,6 +221,8 @@ class AssistantApp:
         assert parsed.proposal is not None
         self.proposals.record(parsed.proposal)
         message = f"Unsupported command logged for review: {parsed.proposal.reason}"
+        self.last_input_text = parsed.proposal.source_text
+        self.last_response = message
         self.audit.record(
             AuditEvent.create(
                 source_text=parsed.proposal.source_text,
@@ -200,6 +231,60 @@ class AssistantApp:
             )
         )
         return message
+
+    def _handle_meta_command(
+        self,
+        command: Command,
+        previous_input: str,
+    ) -> str | None:
+        if command.action == "repeat_response":
+            return self.last_response or "There is no previous assistant response to repeat."
+        if command.action == "report_last_input":
+            return f"Last input: {previous_input}" if previous_input else "No previous input is available."
+        if command.action == "repeat_last_command":
+            if not self.last_command_text:
+                return "There is no previous successful command to repeat."
+            source = self.last_command_text
+            return f"Repeated '{source}'. {self.handle_text(source)}"
+        if command.action == "correct_last_input":
+            correction = command.arguments.get("correction")
+            if not isinstance(correction, str):
+                raise ValueError("Correction text must be provided.")
+            return f"Correction accepted. {self.handle_text(correction)}"
+        if command.action == "undo_last_action":
+            if not self.last_undo_available:
+                return "The previous assistant action does not have an automatic undo."
+            self.last_undo_available = False
+            return self.handle_text("undo last change")
+        if command.action == "show_commands":
+            from voice_control_usb.assistant.command_legend import filter_command_sections
+
+            category = command.arguments.get("category", "All")
+            if not isinstance(category, str):
+                category = "All"
+            normalized = "Routine" if category.casefold() == "routine" else category.title()
+            sections = filter_command_sections(category=normalized)
+            phrases = [item.phrase for section in sections for item in section.commands]
+            return "Available commands: " + ("; ".join(phrases) if phrases else "none")
+        if command.action == "stop_listening":
+            return "Listening stopped. Push to talk when you are ready for another command."
+        return None
+
+    def _remember_success(self, command: Command) -> None:
+        if command.action not in {
+            "confirm_pending",
+            "cancel_pending",
+            "report_status",
+            "repeat_response",
+            "repeat_last_command",
+            "undo_last_action",
+            "report_last_input",
+            "correct_last_input",
+            "show_commands",
+            "stop_listening",
+        }:
+            self.last_command_text = command.source_text
+        self.last_undo_available = command.action in {"type_text", "enter_formula"}
 
     def record_input_outcome(
         self,
@@ -242,6 +327,7 @@ class AssistantApp:
                 details=details,
             )
         )
+        self.last_response = message
         return message
 
     def _build_pending_action(self, command: Command) -> PendingAction:

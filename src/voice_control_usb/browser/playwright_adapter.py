@@ -26,6 +26,8 @@ class PlaywrightBrowserAdapter(BrowserAdapter):
         self._page = None
         self._link_snapshot_url = ""
         self._link_snapshot: tuple[BrowserLink, ...] = ()
+        self._closed_urls: list[str] = []
+        self._zoom_percent = 100
 
     def open_url(self, url: str) -> BrowserPage:
         target = _validate_web_url(url)
@@ -42,6 +44,7 @@ class PlaywrightBrowserAdapter(BrowserAdapter):
 
     def close_tab(self) -> BrowserPage:
         page = self._current_page()
+        self._closed_urls.append(page.url)
         pages = self._live_pages()
         if len(pages) == 1:
             page.goto("about:blank")
@@ -145,6 +148,95 @@ class PlaywrightBrowserAdapter(BrowserAdapter):
         if link is None:
             raise ValueError("Link number is not in the most recent visible link list.")
         return self.open_url(link.url)
+
+    def switch_tab_title(self, title: str) -> BrowserPage:
+        pages = self._live_pages()
+        matches = [page for page in pages if title.casefold() in (page.title() or "").casefold()]
+        if not matches:
+            raise ValueError(f"No browser tab title contains: {title}")
+        if len(matches) > 1:
+            raise ValueError(f"Multiple browser tab titles contain: {title}")
+        self._page = matches[0]
+        self._page.bring_to_front()
+        self._clear_links()
+        return self.report_page()
+
+    def close_tab_index(self, index: int) -> BrowserPage:
+        self.switch_tab(index)
+        return self.close_tab()
+
+    def duplicate_tab(self) -> BrowserPage:
+        url = self._current_page().url
+        self.new_tab()
+        return self.open_url(url) if url != "about:blank" else self.report_page()
+
+    def find_text(self, text: str) -> int:
+        body_text = self._current_page().locator("body").inner_text(timeout=5_000)
+        return body_text.casefold().count(text.casefold())
+
+    def zoom(self, direction: str) -> tuple[BrowserPage, int]:
+        if direction == "in":
+            self._zoom_percent = min(500, self._zoom_percent + 10)
+        elif direction == "out":
+            self._zoom_percent = max(25, self._zoom_percent - 10)
+        elif direction == "reset":
+            self._zoom_percent = 100
+        else:
+            raise ValueError("Browser zoom direction must be in, out, or reset.")
+        self._current_page().evaluate(
+            "percent => { document.documentElement.style.zoom = `${percent}%`; }",
+            self._zoom_percent,
+        )
+        return self.report_page(), self._zoom_percent
+
+    def scroll_edge(self, position: str) -> BrowserPage:
+        if position == "top":
+            self._current_page().evaluate("window.scrollTo(0, 0)")
+        elif position == "bottom":
+            self._current_page().evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        else:
+            raise ValueError("Browser scroll position must be top or bottom.")
+        return self.report_page()
+
+    def read_headings(self) -> tuple[str, ...]:
+        locator = self._current_page().locator("h1, h2, h3, h4, h5, h6")
+        headings: list[str] = []
+        for index in range(min(locator.count(), 30)):
+            heading = locator.nth(index)
+            if not heading.is_visible():
+                continue
+            text = " ".join(heading.inner_text().split())
+            if text:
+                headings.append(text[:180])
+        return tuple(headings)
+
+    def read_selection(self) -> str:
+        return str(self._current_page().evaluate("window.getSelection()?.toString() || ''")).strip()
+
+    def copy_page_url(self) -> str:
+        url = self._current_page().url
+        try:
+            import win32clipboard
+        except ImportError as error:
+            raise ImportError("Copying a page address requires pywin32 on Windows.") from error
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardText(url, win32clipboard.CF_UNICODETEXT)
+        finally:
+            win32clipboard.CloseClipboard()
+        return url
+
+    def stop_loading(self) -> BrowserPage:
+        self._current_page().evaluate("window.stop()")
+        return self.report_page()
+
+    def reopen_closed_tab(self) -> BrowserPage:
+        if not self._closed_urls:
+            raise RuntimeError("There is no recently closed browser tab.")
+        url = self._closed_urls.pop()
+        self.new_tab()
+        return self.open_url(url) if url != "about:blank" else self.report_page()
 
     def close(self) -> None:
         if self._context is not None:

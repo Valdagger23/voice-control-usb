@@ -10,7 +10,7 @@ VoiceControl is a portable, privacy-conscious Windows voice assistant for delibe
 - **Narrow first release:** basic Microsoft Excel control.
 - **Next capabilities:** media/Spotify, browser/Google, and Discord.
 - **Deployment:** main assistant on a trusted USB with a minimal starter on prepared Windows laptops.
-- **Interaction:** push-to-talk and typed fallback; no always-listening MVP.
+- **Interaction:** typed fallback plus an assignable global key or mouse button for hold-to-talk or explicit listening toggle; no wake word.
 
 ## Experience principles
 

@@ -88,12 +88,64 @@ class AssistantRuntimePaths:
     def shutdown_request_path(self) -> Path:
         return self.runtime_dir / "shutdown.request"
 
+    @property
+    def show_window_request_path(self) -> Path:
+        return self.runtime_dir / "show-window.request"
+
+    @property
+    def routine_path(self) -> Path:
+        return self.runtime_dir / "routines.json"
+
+    @property
+    def global_controls_path(self) -> Path:
+        return self.runtime_dir / "global-controls.json"
+
+    @property
+    def speech_profile_path(self) -> Path:
+        return self.runtime_dir / "speech-profile.json"
+
+    @property
+    def speech_model_root(self) -> Path:
+        if self.usb_root is not None:
+            return self.usb_root / "models" / "faster-whisper"
+        return self.runtime_dir / "models" / "faster-whisper"
+
 
 class ShutdownRequestMonitor:
     """Consume the cooperative stop request used before USB removal."""
 
     def __init__(self, request_path: Path) -> None:
         self.request_path = request_path
+
+    def requested(self) -> bool:
+        try:
+            exists = self.request_path.is_file()
+        except OSError:
+            return False
+        if not exists:
+            return False
+        try:
+            self.request_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
+    def clear(self) -> None:
+        try:
+            self.request_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+class ShowWindowRequestMonitor:
+    """Send and consume requests to reveal an already-running tray window."""
+
+    def __init__(self, request_path: Path) -> None:
+        self.request_path = request_path
+
+    def request(self) -> None:
+        self.request_path.parent.mkdir(parents=True, exist_ok=True)
+        self.request_path.write_text("show\n", encoding="ascii")
 
     def requested(self) -> bool:
         try:

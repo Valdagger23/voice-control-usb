@@ -58,6 +58,13 @@ def media_action_specs() -> list[ActionSpec]:
             action_id="report_now_playing",
             description="Report the current Windows media session and playback state.",
         ),
+        ActionSpec(
+            capability_id="media",
+            action_id="adjust_media_volume",
+            description="Adjust speaker volume by a relative amount.",
+            reversible=True,
+            argument_types={"delta": int},
+        ),
     ]
 
 
@@ -79,6 +86,7 @@ class MediaCapability:
             "set_media_volume": self._set_volume,
             "report_media_volume": self._report_volume,
             "report_now_playing": self._report_now_playing,
+            "adjust_media_volume": self._adjust_volume,
         }
         return [ActionBinding(spec, handlers[spec.action_id]) for spec in media_action_specs()]
 
@@ -145,6 +153,20 @@ class MediaCapability:
                 "source_app": snapshot.source_app,
                 "playback_status": snapshot.playback_status,
             },
+        )
+
+    def _adjust_volume(self, command: Command) -> ActionResult:
+        delta = command.arguments.get("delta")
+        if not isinstance(delta, int) or isinstance(delta, bool):
+            raise ValueError("Media volume adjustment must be a whole number.")
+        current = self.adapter.get_volume()
+        target = max(0, min(100, current.percent + delta))
+        snapshot = self.adapter.set_volume(target)
+        direction = "raised" if delta > 0 else "lowered"
+        return self._volume_result(
+            command,
+            snapshot,
+            f"Speaker volume {direction} to {snapshot.percent} percent.",
         )
 
     @staticmethod

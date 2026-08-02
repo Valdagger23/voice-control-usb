@@ -31,6 +31,13 @@ def assistant_action_specs() -> list[ActionSpec]:
             action_id="report_status",
             description="Report the assistant confirmation state.",
         ),
+        ActionSpec("assistant", "repeat_response", "Repeat the previous assistant response."),
+        ActionSpec("assistant", "repeat_last_command", "Repeat the previous successful command."),
+        ActionSpec("assistant", "undo_last_action", "Undo the previous reversible assistant action."),
+        ActionSpec("assistant", "report_last_input", "Report the previous heard or typed command."),
+        ActionSpec("assistant", "correct_last_input", "Replace the previous input with a correction.", argument_types={"correction": str}),
+        ActionSpec("assistant", "show_commands", "List available command phrases.", argument_types={"category": str}),
+        ActionSpec("assistant", "stop_listening", "Stop the current listening cycle."),
     ]
 
 

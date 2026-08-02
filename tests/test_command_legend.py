@@ -39,7 +39,14 @@ class CommandLegendTests(unittest.TestCase):
 
         self.assertEqual(
             {command.registry_name for section in volume for command in section.commands},
-            {"set_media_volume", "report_media_volume"},
+            {
+                "set_media_volume",
+                "report_media_volume",
+                "increase_media_volume",
+                "decrease_media_volume",
+                "discord_input_volume",
+                "discord_output_volume",
+            },
         )
         self.assertTrue(
             {"play_media", "pause_media", "mute_media"}.issubset(

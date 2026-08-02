@@ -58,6 +58,16 @@ class SpeechTranscriber:
         if name:
             raise ValueError("This speech provider does not support microphone selection.")
 
+    def stop_capture(self) -> None:
+        """Request that an active capture ends; providers may finish naturally."""
+
+        return
+
+    def prepare_capture(self) -> None:
+        """Reset provider cancellation state before a worker begins capture."""
+
+        return
+
 
 class ManualTextSpeechTranscriber(SpeechTranscriber):
     """Stub provider that treats manual `record ...` input as recognized speech."""

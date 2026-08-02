@@ -27,6 +27,13 @@ def build_parser() -> argparse.ArgumentParser:
     keys.add_argument("--private-key", required=True)
     keys.add_argument("--public-key", required=True)
 
+    export_key = commands.add_parser(
+        "export-public-key",
+        help="Derive a base64 public verification key from an Ed25519 private key.",
+    )
+    export_key.add_argument("--private-key", required=True)
+    export_key.add_argument("--public-key", required=True)
+
     provision = commands.add_parser("provision-usb", help="Write USB identity and initial active pointer.")
     provision.add_argument("--usb-root", required=True)
     provision.add_argument("--usb-id", required=True)
@@ -53,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "generate-key":
             public_key = generate_key_pair(Path(args.private_key), Path(args.public_key))
             print(f"Generated Ed25519 key pair. Host public key: {public_key}")
+        elif args.action == "export-public-key":
+            public_key = export_public_key(Path(args.private_key), Path(args.public_key))
+            print(f"Exported Ed25519 public key: {public_key}")
         elif args.action == "provision-usb":
             provision_usb(Path(args.usb_root), args.usb_id, args.release_id)
             print(f"Provisioned USB identity {UUID(args.usb_id)} for release {args.release_id}.")
@@ -103,6 +113,28 @@ def generate_key_pair(private_path: Path, public_path: Path) -> str:
             format=serialization.PublicFormat.Raw,
         )
     ).decode("ascii")
+    public_path.write_text(public_value + "\n", encoding="ascii")
+    return public_value
+
+
+def export_public_key(private_path: Path, public_path: Path) -> str:
+    """Write the raw base64 public key derived from an existing private key."""
+
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    except ImportError as error:
+        raise RuntimeError("Public-key export requires the packaging dependencies.") from error
+    key = serialization.load_pem_private_key(private_path.read_bytes(), password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        raise ValueError("Signing key must be an Ed25519 private key.")
+    public_value = b64encode(
+        key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    ).decode("ascii")
+    public_path.parent.mkdir(parents=True, exist_ok=True)
     public_path.write_text(public_value + "\n", encoding="ascii")
     return public_value
 

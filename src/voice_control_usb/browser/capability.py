@@ -26,6 +26,18 @@ def browser_action_specs() -> list[ActionSpec]:
             ActionSpec("browser", "browser_switch_tab", "Switch to a numbered tab.", argument_types={"index": int}),
             ActionSpec("browser", "browser_scroll", "Scroll the current page.", argument_types={"direction": str}),
             ActionSpec("browser", "browser_open_link", "Open a link from the latest visible list.", argument_types={"index": int}),
+            ActionSpec("browser", "browser_open_website", "Open an approved website alias.", argument_types={"alias": str}),
+            ActionSpec("browser", "browser_switch_tab_title", "Switch to a tab by title.", argument_types={"title": str}),
+            ActionSpec("browser", "browser_close_tab_index", "Close a numbered tab.", argument_types={"index": int}),
+            ActionSpec("browser", "browser_duplicate_tab", "Duplicate the current tab."),
+            ActionSpec("browser", "browser_find_text", "Find text on the current page.", argument_types={"text": str}),
+            ActionSpec("browser", "browser_zoom", "Change page zoom.", argument_types={"direction": str}),
+            ActionSpec("browser", "browser_scroll_edge", "Scroll to a page edge.", argument_types={"position": str}),
+            ActionSpec("browser", "browser_read_headings", "Read visible page headings."),
+            ActionSpec("browser", "browser_read_selection", "Read selected page text."),
+            ActionSpec("browser", "browser_copy_page_url", "Copy the current page address."),
+            ActionSpec("browser", "browser_stop_loading", "Stop page loading."),
+            ActionSpec("browser", "browser_reopen_tab", "Reopen the most recently closed tab."),
         ]
     )
     return specs
@@ -52,6 +64,18 @@ class BrowserCapability:
             "browser_list_tabs": self._list_tabs,
             "browser_list_links": self._list_links,
             "browser_open_link": lambda c: self._page(c, self._invoke(lambda: self.adapter.open_link(self._int(c, "index"))), "Opened link"),
+            "browser_open_website": self._open_website,
+            "browser_switch_tab_title": lambda c: self._page(c, self._invoke(lambda: self.adapter.switch_tab_title(self._str(c, "title"))), "Switched"),
+            "browser_close_tab_index": lambda c: self._page(c, self._invoke(lambda: self.adapter.close_tab_index(self._int(c, "index"))), "Closed tab"),
+            "browser_duplicate_tab": lambda c: self._page(c, self._invoke(self.adapter.duplicate_tab), "Duplicated tab"),
+            "browser_find_text": self._find_text,
+            "browser_zoom": self._zoom,
+            "browser_scroll_edge": self._scroll_edge,
+            "browser_read_headings": self._read_headings,
+            "browser_read_selection": self._read_selection,
+            "browser_copy_page_url": self._copy_page_url,
+            "browser_stop_loading": lambda c: self._page(c, self._invoke(self.adapter.stop_loading), "Stopped loading"),
+            "browser_reopen_tab": lambda c: self._page(c, self._invoke(self.adapter.reopen_closed_tab), "Reopened tab"),
         }
         return [ActionBinding(spec, handlers[spec.action_id]) for spec in browser_action_specs()]
 
@@ -59,6 +83,48 @@ class BrowserCapability:
         direction = self._str(command, "direction")
         page = self._invoke(lambda: self.adapter.scroll(direction))
         return self._page(command, page, f"Scrolled {direction} on")
+
+    def _open_website(self, command: Command) -> ActionResult:
+        websites = {
+            "google": "https://www.google.com",
+            "youtube": "https://www.youtube.com",
+            "gmail": "https://mail.google.com",
+            "maps": "https://maps.google.com",
+            "spotify": "https://open.spotify.com",
+        }
+        alias = self._str(command, "alias")
+        url = websites.get(alias)
+        if url is None:
+            raise ValueError(f"Website alias is not approved: {alias}")
+        return self._page(command, self._invoke(lambda: self.adapter.open_url(url)), "Opened website")
+
+    def _find_text(self, command: Command) -> ActionResult:
+        text = self._str(command, "text")
+        count = self._invoke(lambda: self.adapter.find_text(text))
+        return self._result(command, f"Found {count} visible occurrence(s) of '{text}'.", {"query": text, "count": count})
+
+    def _zoom(self, command: Command) -> ActionResult:
+        direction = self._str(command, "direction")
+        page, percent = self._invoke(lambda: self.adapter.zoom(direction))
+        return self._result(command, f"Page zoom is {percent} percent: {page.title}.", {**self._page_details(page), "zoom_percent": percent})
+
+    def _scroll_edge(self, command: Command) -> ActionResult:
+        position = self._str(command, "position")
+        page = self._invoke(lambda: self.adapter.scroll_edge(position))
+        return self._page(command, page, f"Scrolled to {position} on")
+
+    def _read_headings(self, command: Command) -> ActionResult:
+        headings = self._invoke(self.adapter.read_headings)
+        message = "Page headings: " + ("; ".join(headings) if headings else "<none>")
+        return self._result(command, message, {"headings": list(headings)})
+
+    def _read_selection(self, command: Command) -> ActionResult:
+        selected = self._invoke(self.adapter.read_selection)
+        return self._result(command, f"Selected text: {selected or '<none>'}", {"selected_text": selected})
+
+    def _copy_page_url(self, command: Command) -> ActionResult:
+        url = self._invoke(self.adapter.copy_page_url)
+        return self._result(command, f"Copied current page address: {url}", {"url": url})
 
     def _list_tabs(self, command: Command) -> ActionResult:
         tabs = self._invoke(self.adapter.list_tabs)

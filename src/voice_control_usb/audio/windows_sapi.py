@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import sys
+from threading import Event, Lock
 from time import monotonic, sleep
-from typing import Any
+from typing import Any, Callable
 
 from voice_control_usb.audio.transcriber import (
     SpeechTranscriber,
@@ -79,6 +80,7 @@ class WindowsSapiBackend:
         timeout_seconds: float,
         device_name: str | None = None,
         audio_file: Path | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> TranscriptionResult:
         if sys.platform != "win32":
             raise RuntimeError("Windows SAPI speech recognition is only available on Windows.")
@@ -113,6 +115,7 @@ class WindowsSapiBackend:
                 events.result is None
                 and events.error is None
                 and monotonic() < deadline
+                and not (stop_requested is not None and stop_requested())
             ):
                 pythoncom.PumpWaitingMessages()
                 sleep(self.poll_interval_seconds)
@@ -180,6 +183,9 @@ class WindowsSapiSpeechTranscriber(SpeechTranscriber):
     capture_timeout_seconds: float = 8.0
     device_name: str | None = None
     backend: WindowsSapiBackend = field(default_factory=WindowsSapiBackend)
+    _stop_requested: Event = field(default_factory=Event, init=False, repr=False)
+    _capture_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _prepared: bool = field(default=False, init=False, repr=False)
 
     def transcribe(self, audio_source: str | None = None) -> str:
         result = self.transcribe_result(audio_source)
@@ -188,10 +194,24 @@ class WindowsSapiSpeechTranscriber(SpeechTranscriber):
         return result.text
 
     def transcribe_result(self, audio_source: str | None = None) -> TranscriptionResult:
+        with self._capture_lock:
+            if self._prepared:
+                self._prepared = False
+            else:
+                self._stop_requested.clear()
         return self.backend.recognize(
             timeout_seconds=self._parse_capture_timeout(audio_source),
             device_name=self.device_name,
+            stop_requested=self._stop_requested.is_set,
         )
+
+    def stop_capture(self) -> None:
+        self._stop_requested.set()
+
+    def prepare_capture(self) -> None:
+        with self._capture_lock:
+            self._stop_requested.clear()
+            self._prepared = True
 
     def available_input_devices(self) -> tuple[str, ...]:
         return self.backend.available_input_devices()
@@ -224,7 +244,10 @@ def _result_from_sapi(result: Any, status: TranscriptionStatus) -> Transcription
     phrase_info = result.PhraseInfo
     text = str(phrase_info.GetText()).strip()
     confidence_values = [
-        float(phrase_info.Elements.Item(index).EngineConfidence)
+        max(
+            0.0,
+            min(1.0, (float(phrase_info.Elements.Item(index).EngineConfidence) + 1.0) / 2.0),
+        )
         for index in range(int(phrase_info.Elements.Count))
     ]
     confidence = (

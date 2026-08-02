@@ -195,6 +195,158 @@ class ComExcelAdapter(ExcelAdapter):
         target.Select()
         return f"Moved to next row start at {self.current_cell}"
 
+    def create_workbook(self) -> str:
+        excel = self._get_excel()
+        excel.Visible = self.visible
+        workbook = excel.Workbooks.Add()
+        workbook.ActiveSheet.Cells(1, 1).Select()
+        return f"Created workbook: {workbook.Name}"
+
+    def create_sheet(self, name: str) -> str:
+        workbook = self._active_workbook()
+        worksheet = workbook.Worksheets.Add(After=workbook.Worksheets(workbook.Worksheets.Count))
+        worksheet.Name = name
+        worksheet.Activate()
+        return f"Created sheet: {worksheet.Name}"
+
+    def rename_sheet(self, name: str) -> str:
+        worksheet = self._active_sheet()
+        old_name = str(worksheet.Name)
+        worksheet.Name = name
+        return f"Renamed sheet {old_name} to {worksheet.Name}"
+
+    def delete_sheet(self) -> str:
+        workbook = self._active_workbook()
+        if int(workbook.Worksheets.Count) <= 1:
+            raise ValueError("A workbook must retain at least one worksheet.")
+        worksheet = workbook.ActiveSheet
+        deleted = str(worksheet.Name)
+        excel = self._get_excel()
+        previous_alerts = bool(excel.DisplayAlerts)
+        try:
+            excel.DisplayAlerts = False
+            worksheet.Delete()
+        finally:
+            excel.DisplayAlerts = previous_alerts
+        return f"Deleted sheet: {deleted}"
+
+    def select_range(self, cell_range: str) -> str:
+        target = self._active_sheet().Range(cell_range)
+        target.Select()
+        self._set_start_column(int(target.Column))
+        return f"Selected range: {target.Address(False, False)}"
+
+    def read_range(self, cell_range: str) -> str:
+        target = self._active_sheet().Range(cell_range)
+        if int(target.Cells.Count) > 500:
+            raise ValueError("Excel range may not exceed 500 cells for reading.")
+        values: list[str] = []
+        for cell in target.Cells:
+            address = str(cell.Address(False, False))
+            values.append(f"{address}={self._display_value(self._read_cell_value(cell))}")
+        return f"Range {target.Address(False, False)}: {', '.join(values)}"
+
+    def clear_cell(self) -> str:
+        cell = self._active_cell()
+        address = str(cell.Address(False, False))
+        cell.ClearContents()
+        return f"Cleared cell: {address}"
+
+    def clear_range(self, cell_range: str) -> str:
+        target = self._active_sheet().Range(cell_range)
+        target.ClearContents()
+        return f"Cleared range: {target.Address(False, False)}"
+
+    def copy_cell(self) -> str:
+        cell = self._active_cell()
+        cell.Copy()
+        return f"Copied cell: {cell.Address(False, False)}"
+
+    def copy_range(self, cell_range: str) -> str:
+        target = self._active_sheet().Range(cell_range)
+        target.Copy()
+        return f"Copied range: {target.Address(False, False)}"
+
+    def paste_cells(self) -> str:
+        cell = self._active_cell()
+        self._active_sheet().Paste(Destination=cell)
+        return f"Pasted cells at {cell.Address(False, False)}"
+
+    def fill_down(self) -> str:
+        selection = self._get_excel().Selection
+        if selection is None or int(selection.Rows.Count) < 2:
+            raise ValueError("Select a range containing at least two rows first.")
+        selection.FillDown()
+        return f"Filled down: {selection.Address(False, False)}"
+
+    def find_value(self, query: str) -> str:
+        worksheet = self._active_sheet()
+        match = worksheet.Cells.Find(What=query)
+        if match is None:
+            return f"Value not found: {query}"
+        match.Select()
+        return f"Found {self._quoted_value(query)} at {match.Address(False, False)}"
+
+    def replace_value(self, old: str, new: str) -> str:
+        worksheet = self._active_sheet()
+        before = int(worksheet.UsedRange.Cells.Count)
+        replaced = bool(worksheet.Cells.Replace(What=old, Replacement=new, LookAt=1))
+        return (
+            f"Replaced matching values {self._quoted_value(old)} with {self._quoted_value(new)}"
+            if replaced
+            else f"No exact matches found for {self._quoted_value(old)} across {before} used cell(s)"
+        )
+
+    def enter_formula(self, formula: str) -> str:
+        if not formula.startswith("="):
+            raise ValueError("Excel formula must start with '='.")
+        cell = self._active_cell()
+        address = str(cell.Address(False, False))
+        cell.Formula = formula
+        return f"Entered formula {formula} into {address}"
+
+    def format_currency(self) -> str:
+        selection = self._get_excel().Selection
+        selection.NumberFormat = "$#,##0.00"
+        return f"Formatted selection as currency: {selection.Address(False, False)}"
+
+    def format_bold(self) -> str:
+        selection = self._get_excel().Selection
+        selection.Font.Bold = True
+        return f"Made selection bold: {selection.Address(False, False)}"
+
+    def sort_by_column(self, column: str) -> str:
+        worksheet = self._active_sheet()
+        key = worksheet.Range(f"{column}1")
+        used = worksheet.UsedRange
+        used.Sort(Key1=key, Order1=1, Header=1)
+        return f"Sorted column {column.upper()}"
+
+    def filter_column(self, column: str, value: ExcelValue) -> str:
+        worksheet = self._active_sheet()
+        used = worksheet.UsedRange
+        absolute_column = self._column_number(column.upper())
+        first_used_column = int(used.Column)
+        field = absolute_column - first_used_column + 1
+        if not 1 <= field <= int(used.Columns.Count):
+            raise ValueError(f"Column {column.upper()} is outside the used range.")
+        used.AutoFilter(Field=field, Criteria1=str(value))
+        return f"Filtered column {column.upper()} by {self._quoted_value(value)}"
+
+    def insert_row(self, position: str) -> str:
+        if position not in {"above", "below"}:
+            raise ValueError("Row insertion position must be above or below.")
+        row = int(self._active_cell().Row) + (1 if position == "below" else 0)
+        self._active_sheet().Rows(row).Insert()
+        self._active_sheet().Cells(row, 1).Select()
+        return f"Inserted row {row}"
+
+    def close_workbook(self) -> str:
+        workbook = self._active_workbook()
+        name = str(workbook.Name)
+        workbook.Close(SaveChanges=False)
+        return f"Closed workbook without saving: {name}"
+
     @property
     def current_cell(self) -> str:
         active_cell = self._active_cell()
@@ -302,6 +454,13 @@ class ComExcelAdapter(ExcelAdapter):
             current, remainder = divmod(current - 1, 26)
             result.append(chr(ord("A") + remainder))
         return "".join(reversed(result))
+
+    @staticmethod
+    def _column_number(letters: str) -> int:
+        total = 0
+        for character in letters:
+            total = (total * 26) + (ord(character) - ord("A") + 1)
+        return total
 
     @staticmethod
     def _display_value(value: object) -> str:

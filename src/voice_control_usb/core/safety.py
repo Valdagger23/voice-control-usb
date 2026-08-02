@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from voice_control_usb.core.capabilities import CapabilityRegistry, SafetyClass
 from voice_control_usb.core.models import Command
 from voice_control_usb.core.workflows import WorkflowRegistry
+from voice_control_usb.core.user_routines import UserRoutineStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,9 +25,11 @@ class SafetyPolicy:
         self,
         workflow_registry: WorkflowRegistry,
         action_catalog: CapabilityRegistry | None = None,
+        user_routines: UserRoutineStore | None = None,
     ) -> None:
         self.workflow_registry = workflow_registry
         self.action_catalog = action_catalog
+        self.user_routines = user_routines
 
     def classify(self, command: Command) -> SafetyDecision:
         return self._classify_action(command.action, command.arguments, command.source_text)
@@ -84,6 +87,38 @@ class SafetyPolicy:
                     highest = SafetyDecision(
                         SafetyClass.REQUIRES_CONFIRMATION,
                         f"Confirmation required for workflow '{workflow.name}'. Type confirm to proceed or cancel.",
+                    )
+            return highest
+
+        if action == "run_user_routine":
+            routine_name = arguments.get("routine_name")
+            if not isinstance(routine_name, str) or self.user_routines is None:
+                return SafetyDecision(SafetyClass.BLOCKED, "Routine is not available.")
+            try:
+                steps = self.user_routines.parsed_commands(routine_name)
+            except ValueError as error:
+                return SafetyDecision(SafetyClass.BLOCKED, str(error))
+            if not steps:
+                return SafetyDecision(
+                    SafetyClass.BLOCKED,
+                    f"Routine has no commands: {routine_name}",
+                )
+            highest = SafetyDecision(SafetyClass.ALLOWED)
+            for step in steps:
+                step_decision = self._classify_action(
+                    step.action,
+                    step.arguments,
+                    step.source_text,
+                )
+                if step_decision.safety_class is SafetyClass.BLOCKED:
+                    return SafetyDecision(
+                        SafetyClass.BLOCKED,
+                        f"Routine '{routine_name}' is blocked because it contains an unapproved command.",
+                    )
+                if step_decision.safety_class is SafetyClass.REQUIRES_CONFIRMATION:
+                    highest = SafetyDecision(
+                        SafetyClass.REQUIRES_CONFIRMATION,
+                        f"Confirmation required for routine '{routine_name}' because it contains a sensitive step. Type confirm to proceed or cancel.",
                     )
             return highest
 

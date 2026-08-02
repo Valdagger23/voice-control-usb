@@ -11,6 +11,12 @@ from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.assistant.windows_shell import run_windows_shell
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
+from voice_control_usb.audio.profiled import ProfiledSpeechTranscriber
+from voice_control_usb.audio.speech_profile import (
+    LOCAL_WHISPER,
+    SpeechProfileStore,
+    WINDOWS_SAPI,
+)
 from voice_control_usb.browser.factory import (
     create_browser_adapter,
     default_browser_profile_dir,
@@ -24,11 +30,13 @@ from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
+    ShowWindowRequestMonitor,
     ShutdownRequestMonitor,
 )
 from voice_control_usb.spotify.connect import connect_spotify_account
 from voice_control_usb.spotify.credentials import WindowsCredentialStore
 from voice_control_usb.spotify.oauth import SpotifyOAuthClient, SpotifyOAuthConfig
+from voice_control_usb.spotify.factory import create_spotify_adapter
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,6 +91,11 @@ def main(argv: list[str] | None = None) -> int:
         "--window",
         action="store_true",
         help="Open the visible Windows assistant window with typed input.",
+    )
+    parser.add_argument(
+        "--start-minimized",
+        action="store_true",
+        help="Start window mode in the Windows notification area when available.",
     )
     parser.add_argument(
         "--input-mode",
@@ -158,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("one-shot mode requires a command, or use --session or --window")
     if namespace.window and namespace.command:
         parser.error("window mode does not accept a one-shot command")
+    if namespace.start_minimized and not namespace.window:
+        parser.error("--start-minimized requires --window")
     if namespace.input_mode == "speech" and not namespace.session:
         parser.error("speech input mode requires --session")
     if spotify_mode and (namespace.session or namespace.window or namespace.command):
@@ -240,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
 
     instance_guard = AssistantInstanceGuard(runtime_paths.lock_path)
     shutdown_monitor = ShutdownRequestMonitor(runtime_paths.shutdown_request_path)
+    show_window_monitor = ShowWindowRequestMonitor(runtime_paths.show_window_request_path)
     try:
         instance_guard.acquire()
     except DuplicateInstanceError as error:
@@ -261,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
             channel=namespace.browser_channel,
         )
         discord = create_discord_adapter(discord_selection)
+        spotify = create_spotify_adapter()
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
         print(f"Assistant startup failed: {error}")
@@ -274,16 +291,38 @@ def main(argv: list[str] | None = None) -> int:
             media=media,
             browser=browser,
             discord=discord,
+            spotify=spotify,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
+            routine_path=runtime_paths.routine_path,
         )
         if namespace.window:
             try:
-                transcriber = create_speech_transcriber(speech_selection)
-                transcriber.select_input_device(namespace.microphone)
+                if speech_selection in {WINDOWS_SAPI, LOCAL_WHISPER}:
+                    transcriber = ProfiledSpeechTranscriber(
+                        SpeechProfileStore(runtime_paths.speech_profile_path),
+                        runtime_paths.speech_model_root,
+                        fallback_provider=speech_selection,
+                        provider_override=(
+                            None
+                            if namespace.speech_provider == "auto"
+                            else speech_selection
+                        ),
+                        microphone_override=namespace.microphone,
+                    )
+                else:
+                    transcriber = create_speech_transcriber(speech_selection)
+                    transcriber.select_input_device(namespace.microphone)
             except (ImportError, RuntimeError, ValueError) as error:
                 print(f"Assistant startup failed: {error}")
                 return 2
-            run_windows_shell(app, transcriber, shutdown_monitor.requested)
+            run_windows_shell(
+                app,
+                transcriber,
+                shutdown_monitor.requested,
+                show_window_monitor.requested,
+                global_controls_path=runtime_paths.global_controls_path,
+                start_minimized=namespace.start_minimized,
+            )
             return 0
         if namespace.session:
             if namespace.input_mode == "speech":

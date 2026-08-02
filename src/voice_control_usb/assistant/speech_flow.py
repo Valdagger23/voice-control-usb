@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from typing import Callable
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.assistant.command_legend import COMMAND_SECTIONS
+from voice_control_usb.audio.speech_profile import (
+    PhraseInterpretation,
+    SpeechProfile,
+    apply_personal_correction,
+    match_safe_static_command,
+)
 from voice_control_usb.audio.transcriber import (
     TranscriptionResult,
     TranscriptionStatus,
@@ -24,9 +32,20 @@ class SpeechDispatchResult:
     executed: bool = False
 
 
+_SAFE_STATIC_COMMANDS = tuple(
+    command.example
+    for section in COMMAND_SECTIONS
+    for command in section.commands
+    if not command.badge and "<" not in command.phrase
+)
+
+
 def dispatch_transcription(
     app: AssistantApp,
     transcription: TranscriptionResult,
+    *,
+    speech_profile: SpeechProfile | None = None,
+    correction_recorder: Callable[[str, str], None] | None = None,
 ) -> SpeechDispatchResult:
     """Execute recognized text or audit a rejected input-stage result."""
 
@@ -51,7 +70,61 @@ def dispatch_transcription(
         )
         return SpeechDispatchResult(message=message, transcript=transcription.text)
 
-    interpreted_text = normalize_spoken_command(transcription.text)
+    if (
+        speech_profile is not None
+        and transcription.confidence is not None
+        and transcription.confidence < speech_profile.confidence_threshold
+    ):
+        confidence_percent = round(max(0.0, min(1.0, transcription.confidence)) * 100)
+        message = (
+            f"Speech confidence was only {confidence_percent}%. Nothing was executed; "
+            "please try again or lower the threshold in Speech Accuracy."
+        )
+        app.record_input_outcome(
+            source_text=transcription.text,
+            outcome=AuditOutcome.INPUT_REJECTED,
+            message=message,
+            details={
+                "input_type": "speech",
+                "transcription_status": "low_confidence",
+                "confidence": transcription.confidence,
+                "confidence_threshold": speech_profile.confidence_threshold,
+                "alternatives": list(transcription.alternatives),
+            },
+        )
+        return SpeechDispatchResult(message=message, transcript=transcription.text)
+
+    interpretation_source = "normalization"
+    correction = (
+        apply_personal_correction(
+            transcription.text,
+            speech_profile,
+            alternatives=transcription.alternatives,
+        )
+        if speech_profile is not None
+        else None
+    )
+    source_text = correction.text if correction is not None else transcription.text
+    if correction is not None and correction.source == "personal":
+        interpretation_source = correction.source
+    interpreted_text = normalize_spoken_command(source_text)
+    if app.parser.parse(interpreted_text).command is None:
+        punctuation_recovery = recover_terminal_command_punctuation(
+            interpreted_text,
+            lambda candidate: app.parser.parse(candidate).command is not None,
+        )
+        if punctuation_recovery.source == "terminal_punctuation":
+            interpreted_text = punctuation_recovery.text
+            interpretation_source = punctuation_recovery.source
+    if (
+        speech_profile is not None
+        and speech_profile.command_matching
+        and app.parser.parse(interpreted_text).command is None
+    ):
+        command_match = match_safe_static_command(interpreted_text, _SAFE_STATIC_COMMANDS)
+        if command_match.source == "command_match":
+            interpreted_text = command_match.text
+            interpretation_source = command_match.source
     if interpreted_text != transcription.text:
         app.record_input_outcome(
             source_text=transcription.text,
@@ -61,8 +134,20 @@ def dispatch_transcription(
                 "input_type": "speech",
                 "transcription_status": transcription.status.value,
                 "interpreted_text": interpreted_text,
+                "interpretation_source": interpretation_source,
             },
         )
+    previous_input = app.last_input_text
+    parsed = app.parser.parse(interpreted_text).command
+    if (
+        parsed is not None
+        and parsed.action == "correct_last_input"
+        and correction_recorder is not None
+        and previous_input
+    ):
+        intended = parsed.arguments.get("correction")
+        if isinstance(intended, str) and app.parser.parse(intended).command is not None:
+            correction_recorder(previous_input, intended)
     return SpeechDispatchResult(
         message=app.handle_text(interpreted_text),
         transcript=transcription.text,
@@ -134,3 +219,24 @@ def normalize_spoken_command(transcript: str) -> str:
         return f"go to {column_words.get(column, column.upper())}{row_words.get(row, row)}"
 
     return normalized
+
+
+def recover_terminal_command_punctuation(
+    transcript: str,
+    is_supported: Callable[[str], bool],
+) -> PhraseInterpretation:
+    """Remove recognizer sentence punctuation only when that reveals a command."""
+
+    if is_supported(transcript):
+        return PhraseInterpretation(transcript)
+    without_terminal_punctuation = re.sub(r"[.!?,;:…]+$", "", transcript).rstrip()
+    if (
+        without_terminal_punctuation != transcript
+        and is_supported(without_terminal_punctuation)
+    ):
+        return PhraseInterpretation(
+            without_terminal_punctuation,
+            "terminal_punctuation",
+            1.0,
+        )
+    return PhraseInterpretation(transcript)

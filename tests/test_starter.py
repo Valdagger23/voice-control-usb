@@ -122,6 +122,7 @@ class StarterTests(unittest.TestCase):
                 (
                     str(executable.resolve()),
                     "--window",
+                    "--start-minimized",
                     "--usb-root",
                     str(usb_root.resolve()),
                     "--runtime-dir",

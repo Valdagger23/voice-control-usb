@@ -119,6 +119,29 @@ class CliTests(unittest.TestCase):
             run_window.call_args.args[1].__class__.__name__,
             "ManualTextSpeechTranscriber",
         )
+        self.assertEqual(
+            run_window.call_args.kwargs["global_controls_path"].name,
+            "global-controls.json",
+        )
+        self.assertFalse(run_window.call_args.kwargs["start_minimized"])
+
+    def test_window_mode_can_start_in_notification_area(self) -> None:
+        with patch("voice_control_usb.assistant.cli.run_windows_shell") as run_window:
+            exit_code = cli.main(
+                [
+                    "--window",
+                    "--start-minimized",
+                    "--excel-adapter",
+                    "stub",
+                    "--desktop-adapter",
+                    "stub",
+                    "--speech-provider",
+                    "stub",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(run_window.call_args.kwargs["start_minimized"])
 
     def test_window_mode_selects_native_desktop_adapter_on_windows(self) -> None:
         with patch("voice_control_usb.assistant.cli.sys.platform", "win32"), patch(

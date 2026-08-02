@@ -16,6 +16,8 @@ from voice_control_usb.core.capabilities import (
 )
 from voice_control_usb.core.models import Command
 from voice_control_usb.core.workflows import WorkflowRegistry
+from voice_control_usb.core.routine_capability import UserRoutineCapability
+from voice_control_usb.core.user_routines import UserRoutineStore
 from voice_control_usb.desktop.adapter import DesktopAdapter
 from voice_control_usb.desktop.capability import DesktopCapability
 from voice_control_usb.discord.adapter import DiscordAdapter, StubDiscordAdapter
@@ -24,6 +26,8 @@ from voice_control_usb.excel.adapter import ExcelAdapter
 from voice_control_usb.excel.capability import ExcelCapability
 from voice_control_usb.media.adapter import MediaAdapter, StubMediaAdapter
 from voice_control_usb.media.capability import MediaCapability
+from voice_control_usb.spotify.adapter import SpotifyAdapter, StubSpotifyAdapter
+from voice_control_usb.spotify.capability import SpotifyCapability
 
 
 class ExecutionEngine:
@@ -36,6 +40,8 @@ class ExecutionEngine:
         media: MediaAdapter | None = None,
         browser: BrowserAdapter | None = None,
         discord: DiscordAdapter | None = None,
+        spotify: SpotifyAdapter | None = None,
+        user_routines: UserRoutineStore | None = None,
         workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         # Compatibility views retained while callers migrate to capabilities.
@@ -44,6 +50,8 @@ class ExecutionEngine:
         self.media = media or StubMediaAdapter()
         self.browser = browser or StubBrowserAdapter()
         self.discord = discord or StubDiscordAdapter()
+        self.spotify = spotify or StubSpotifyAdapter()
+        self.user_routines = user_routines or UserRoutineStore()
         self.handlers = {}
 
         self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
@@ -55,12 +63,16 @@ class ExecutionEngine:
         self._register_capability(MediaCapability(self.media))
         self._register_capability(BrowserCapability(self.browser))
         self._register_capability(DiscordCapability(self.discord))
+        self._register_capability(SpotifyCapability(self.spotify))
         self.workflow_registry.validate_contracts(self.registry)
         self._register_capability(
             WorkflowCapability(
                 workflows=self.workflow_registry,
                 action_registry=self.registry,
             )
+        )
+        self._register_capability(
+            UserRoutineCapability(self.user_routines, self.registry)
         )
 
     def execute(self, command: Command) -> str:

@@ -15,10 +15,17 @@ from voice_control_usb.audio.transcriber import (
     SpeechRecognitionTranscriber,
     SpeechTranscriber,
 )
+from voice_control_usb.audio.local_whisper import LocalWhisperSpeechTranscriber
 from voice_control_usb.audio.windows_sapi import WindowsSapiSpeechTranscriber
 
 
-def create_speech_transcriber(selection: str = "stub") -> SpeechTranscriber:
+def create_speech_transcriber(
+    selection: str = "stub",
+    *,
+    model_root: str | None = None,
+    model_name: str = "small.en",
+    locale: str = "en-IE",
+) -> SpeechTranscriber:
     """Create the configured speech transcriber."""
 
     normalized = selection.strip().lower()
@@ -40,9 +47,25 @@ def create_speech_transcriber(selection: str = "stub") -> SpeechTranscriber:
                 "Install the project with 'pip install -e .[windows]'."
             )
         return WindowsSapiSpeechTranscriber()
+    if normalized == "local_whisper":
+        if (
+            importlib.util.find_spec("faster_whisper") is None
+            or importlib.util.find_spec("sounddevice") is None
+        ):
+            raise ImportError(
+                "Local accurate speech requires faster-whisper and sounddevice. "
+                "Install the project with 'pip install -e .[accuracy]'."
+            )
+        from pathlib import Path
+
+        return LocalWhisperSpeechTranscriber(
+            model_root=Path(model_root or "runtime/models/faster-whisper").resolve(),
+            model_name=model_name,
+            locale=locale,
+        )
     raise ValueError(
         "Unknown speech provider selection. Expected one of: "
-        "'stub', 'windows_sapi', 'speech_recognition'."
+        "'stub', 'windows_sapi', 'local_whisper', 'speech_recognition'."
     )
 
 

@@ -7,18 +7,19 @@ VoiceControl is a capability-based Windows assistant. Excel is the first product
 ## Deployable components
 
 1. **Local Windows starter** — discovers the removable drive, validates its host-pinned identity and signed immutable release, coordinates updates and safe removal, prevents duplicate launches, and starts the assistant without performing automation.
-2. **USB-hosted assistant** — owns the user interface, input, command processing, safety policy, capability routing, session state, audit history, runtime lock, and cooperative shutdown monitor.
+2. **USB-root manual launcher** — provides a branded `Voice Control.exe` entry point on unfamiliar Windows PCs, derives the drive root from its own location, verifies the active release with an embedded public key, and reveals an existing tray instance when appropriate.
+3. **USB-hosted assistant** — owns the user interface, input, command processing, safety policy, capability routing, session state, audit history, runtime lock, cooperative window-reveal request, and shutdown monitor.
 
 The system does not use USB autorun. Account credentials remain in the prepared Windows user's credential store rather than portable plaintext files.
 
 ## Portable release flow
 
-The local configuration pins a USB UUID and an Ed25519 public key. The USB active pointer names one immutable release whose signed manifest binds the USB ID, release ID, entry point, and every file's size and SHA-256 hash. Updates are copied and re-verified under a temporary release directory before a directory rename and atomic active-pointer replacement. An interruption therefore leaves the prior active release intact. All assistant runtime paths are derived from the removable-drive root detected during the current scan.
+The local starter configuration pins a USB UUID and an Ed25519 public key; the manual launcher embeds the same public key during packaging. The USB active pointer names one immutable release whose signed manifest binds the USB ID, release ID, entry point, and every file's size and SHA-256 hash. Updates are copied and re-verified under a temporary release directory before a directory rename and atomic active-pointer replacement. An interruption therefore leaves the prior active release intact. All assistant runtime paths are derived from the removable-drive root detected during the current scan or from the manual launcher's own location.
 
 ## Target layers
 
 1. **Assistant shell** — tray/window UI, lifecycle, visible state, and typed fallback.
-2. **Input adapters** — push-to-talk activation and pluggable speech transcription.
+2. **Input adapters** — push-to-talk activation, persistent microphone profiles, and switchable Windows SAPI or local Whisper transcription.
 3. **Interpretation** — normalize input into a typed command or a reviewable unsupported proposal.
 4. **Policy** — classify the command as allowed, confirmation-required, or blocked.
 5. **Context** — maintain application-neutral session state plus isolated capability state.
@@ -30,13 +31,15 @@ The local configuration pins a USB UUID and an Ed25519 public key. The USB activ
 ## Runtime flow
 
 1. The user activates typed or push-to-talk input.
-2. Speech is transcribed into text.
-3. Interpretation produces a typed command with validated arguments.
+2. Speech is transcribed locally and rejected if its confidence is below the user's saved threshold.
+3. Exact personal corrections and conservative safe-command recovery run before normal deterministic interpretation produces a typed command with validated arguments.
 4. Policy evaluates the action and current state.
 5. Confirmation is requested when required.
 6. The capability registry routes the command to an approved adapter.
 7. The adapter returns a structured result and optional reversible-change record.
-8. The shell reports the outcome and persists an audit event.
+8. The shell reports the raw transcript, any interpretation, and the outcome, then persists an audit event.
+
+The portable speech profile stores recognizer, microphone, locale guidance, model, confidence threshold, and exact phrase corrections. It never stores captured audio. Whisper model files are downloaded on first use into the portable model cache and are not command logic: every transcript still passes through the parser, capability registry, confirmation policy, and audit boundary.
 
 ## Capability contract
 

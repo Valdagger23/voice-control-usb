@@ -1,13 +1,18 @@
 # VoiceControl
 
-VoiceControl is a Windows-first, USB-portable voice assistant. The long-term product supports modular Windows capabilities; the first production capability is deliberately limited to reliable Microsoft Excel control.
+VoiceControl is a Windows-first, USB-portable assistant with deterministic voice and typed control for Excel, Windows, browsers, media, Spotify, and Discord.
 
 ## Project status
 
-The planned Phase 0-7 roadmap is complete. Voice Control now combines the native Excel, speech, media, browser, and deliberate Discord slices with a verified USB deployment and recovery path.
+The planned Phase 0-7 roadmap is complete. Voice Control now combines 158 visible commands, editable user routines, native integrations, and a verified USB deployment and recovery path.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
+- The dark command console lists every supported phrase and includes a collapsible routine builder.
+- Users can create routines, drag commands into a left-to-right sequence, edit or reorder steps, and start the saved chain by name.
+- Prepared Windows hosts launch the trusted USB assistant into a branded notification-area icon; clicking it opens the command console.
+- Any compatible Windows PC can also open the USB and double-click the branded root-level `Voice Control.exe` launcher; no autorun or host starter is required for this manual path.
+- A persistent global keyboard key or mouse button can be assigned to hold-to-talk or toggle continuous listening.
 - Discord launch, allowlisted navigation, visible drafts, and inspected device state now use Windows accessibility without user tokens or self-bot APIs.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
 - Signed immutable releases, host-pinned USB identity, duplicate protection, safe removal, staged updates, and recovery are implemented and verified on the physical D: removable drive.
@@ -61,6 +66,9 @@ Phase 2 additionally provides:
 Phase 3 additionally provides:
 
 - offline Windows SAPI recognition through the installed pywin32 dependency
+- optional private local Whisper recognition with selectable English model and accent guidance
+- a persistent Speech Accuracy panel for recognizer, microphone, confidence threshold, and personal exact corrections
+- non-executing microphone tests plus conservative safe-command recovery for clear recognition mistakes
 - a non-blocking `Push to talk` button and microphone selector
 - raw transcript, visible normalized interpretation, and execution status
 - deterministic silence, ambiguity, unsupported-phrase, and provider-failure handling
@@ -72,7 +80,7 @@ Phase 4 additionally provides:
 - native play, pause, previous, next, and now-playing control through the current Windows media session
 - explicit speaker mute, unmute, volume setting, and volume reporting through the default Windows playback endpoint
 - deterministic media commands available through typed input and the existing push-to-talk path
-- optional Spotify Authorization Code with PKCE setup using only playback scopes
+- optional Spotify Authorization Code with PKCE for playback, saved-track, and playlist actions
 - Spotify refresh-token storage in Windows Credential Manager; no token is written to the repository or USB runtime
 
 Phase 5 additionally provides:
@@ -101,6 +109,13 @@ Phase 7 additionally provides:
 - cooperative assistant shutdown before USB removal
 - staged double-verification, atomic activation, and verified-release recovery
 
+The current expanded control release additionally provides:
+
+- 158 deterministic command definitions across Excel, browser, media/Spotify, Discord/calls, Windows/safety, and routines
+- persistent named routines stored in the runtime directory, with drag-and-drop creation and reordering
+- one confirmation for a routine containing confirmation-required steps; blocked and nested routine commands are rejected
+- broader object-level Excel operations, visible browser reading/navigation, Windows window management, Spotify playback/library actions, and deliberate Discord call controls
+
 ## Development environment
 - Active repository: `D:\VoiceControl`
 - Windows Python 3.12 or newer in a project-local `.venv`
@@ -116,12 +131,17 @@ py -3 -m venv .venv
 ```
 
 ## Trusted USB starter
+- The built USB image places a friendly `Voice Control.exe` at its root for manual double-click launch on unfamiliar Windows PCs
+- The launcher locates the USB from its own path, verifies the active signed assistant release with its embedded public key, and opens the full console visibly
+- Double-clicking it again reveals the existing tray window rather than starting a duplicate assistant
 - Local starter config is JSON-based and separate from the USB-hosted assistant
 - Trust requires the expected removable-volume label, host-pinned USB UUID, signed manifest, and matching hash and size for every release file
 - The starter launches a packaged assistant executable from the trusted USB with `shell=False`
 - The starter passes `--window`, `--usb-root`, and `--runtime-dir` explicitly to the packaged assistant
 - Duplicate launches are prevented by watcher tracking, pre-launch lock inspection, and the assistant's atomic runtime lock
 - `--prepare-removal` cooperatively closes the assistant and waits for lock cleanup
+- the one-time host starter install is required because Windows does not permit arbitrary USB software to auto-run on an unfamiliar PC
+- once installed, the starter begins watching immediately and at future logons; a verified USB launch starts minimized in the notification area
 - `--activate-update` verifies before and after staging, then atomically switches the active release; `--recover` repairs the pointer from verified releases
 - Details: [docs/USB_STARTER_SPEC.md](docs/USB_STARTER_SPEC.md)
 - Packaging details: [docs/DEPLOYMENT_PACKAGING.md](docs/DEPLOYMENT_PACKAGING.md)
@@ -147,7 +167,8 @@ py -3 -m venv .venv
 - Details and commands: [docs/MEDIA_SPOTIFY.md](docs/MEDIA_SPOTIFY.md)
 
 ## Runtime modes
-- Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native desktop, Excel COM, media, browser, Discord, and offline Windows speech adapters by default
+- Visible Windows mode: `--window` opens typed and voice input, selecting native desktop, Excel COM, media, browser, Discord, and offline Windows speech adapters by default
+- Tray mode: `--window --start-minimized` starts in the notification area; closing the console hides it there instead of ending the assistant
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
@@ -166,6 +187,8 @@ py -3 -m venv .venv
 ## Workflows
 - Approved multi-step macros are registry-driven
 - Workflow phrases expand into existing deterministic actions only
+- User routines are editable, persistent command sequences created in the visible routine builder
+- Say `start <NAME> routine` or use the routine panel's `RUN` button to execute the displayed steps from left to right
 - Details: [docs/WORKFLOWS.md](docs/WORKFLOWS.md)
 
 ## Local verification
@@ -175,6 +198,7 @@ Windows baseline:
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
 - `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_speech.py`
+- `.\.venv\Scripts\python.exe scripts\verify_local_whisper.py --model base.en`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_media.py --exercise-play-pause`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_browser.py`
 - `.\.venv\Scripts\python.exe -m voice_control_usb --window`
@@ -219,7 +243,9 @@ WSL baseline, when the USB filesystem is mounted:
 - Speech session mode is available with `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
 
 ## Speech input
-- Controlled activation only for now: manual `record ...` lines in speech session mode
+- The window's `CONTROL` button assigns any single keyboard key or mouse button globally
+- `PUSH TO TALK` listens while that input is held; `TOGGLE LISTENING` starts and stops an explicit continuous command loop
+- Bindings persist in `runtime/global-controls.json`; they do not suppress the chosen input in other applications
 - Default speech provider: stub/manual for WSL and tests
 - First real provider: `speech_recognition`
 - Speech activation modes: `manual` and `ptt`

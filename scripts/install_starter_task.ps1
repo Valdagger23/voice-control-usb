@@ -24,4 +24,6 @@ Register-ScheduledTask `
     -Description "Trusted USB starter for voice-control-usb" `
     -Force | Out-Null
 
-Write-Host "Installed scheduled task '$TaskName' for starter '$StarterExe'."
+Start-ScheduledTask -TaskName $TaskName
+
+Write-Host "Installed and started scheduled task '$TaskName' for starter '$StarterExe'."

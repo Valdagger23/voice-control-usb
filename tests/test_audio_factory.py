@@ -15,6 +15,7 @@ from voice_control_usb.audio.transcriber import (
     TranscriptionStatus,
 )
 from voice_control_usb.audio.windows_sapi import WindowsSapiSpeechTranscriber
+from voice_control_usb.audio.local_whisper import LocalWhisperSpeechTranscriber
 
 
 class SpeechFactoryTests(unittest.TestCase):
@@ -51,6 +52,20 @@ class SpeechFactoryTests(unittest.TestCase):
     def test_unknown_provider_fails_cleanly(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown speech provider selection"):
             create_speech_transcriber("mystery")
+
+    def test_local_whisper_provider_requires_both_accuracy_dependencies(self) -> None:
+        with patch("importlib.util.find_spec", return_value=None):
+            with self.assertRaisesRegex(ImportError, "Local accurate speech requires"):
+                create_speech_transcriber("local_whisper")
+
+    def test_local_whisper_provider_can_be_selected(self) -> None:
+        with patch("importlib.util.find_spec", return_value=SimpleNamespace()):
+            transcriber = create_speech_transcriber(
+                "local_whisper",
+                model_root="runtime/test-models",
+            )
+
+        self.assertIsInstance(transcriber, LocalWhisperSpeechTranscriber)
 
     def test_manual_speech_activation_is_default(self) -> None:
         activator = create_speech_activator()
@@ -123,10 +138,9 @@ class WindowsSapiSpeechTranscriberTests(unittest.TestCase):
 
         self.assertIs(result.status, TranscriptionStatus.RECOGNIZED)
         self.assertEqual(result.text, "open excel")
-        self.assertEqual(
-            backend.calls,
-            [{"timeout_seconds": 4.0, "device_name": "Microphone B"}],
-        )
+        self.assertEqual(backend.calls[0]["timeout_seconds"], 4.0)
+        self.assertEqual(backend.calls[0]["device_name"], "Microphone B")
+        self.assertTrue(callable(backend.calls[0]["stop_requested"]))
 
     def test_provider_rejects_unknown_microphone(self) -> None:
         transcriber = WindowsSapiSpeechTranscriber(
@@ -143,6 +157,28 @@ class WindowsSapiSpeechTranscriberTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "duration must be greater than zero"):
             transcriber.transcribe_result("record 0")
+
+    def test_prepared_capture_preserves_an_immediate_stop_request(self) -> None:
+        class StopAwareBackend(self.FakeBackend):
+            def recognize(self, **kwargs: object) -> TranscriptionResult:
+                self.calls.append(dict(kwargs))
+                stop_requested = kwargs["stop_requested"]
+                if callable(stop_requested) and stop_requested():
+                    return TranscriptionResult(status=TranscriptionStatus.SILENCE)
+                return TranscriptionResult(
+                    status=TranscriptionStatus.RECOGNIZED,
+                    text="open excel",
+                )
+
+        transcriber = WindowsSapiSpeechTranscriber(
+            backend=StopAwareBackend(),  # type: ignore[arg-type]
+        )
+        transcriber.prepare_capture()
+        transcriber.stop_capture()
+
+        result = transcriber.transcribe_result("record")
+
+        self.assertIs(result.status, TranscriptionStatus.SILENCE)
 
 
 if __name__ == "__main__":
