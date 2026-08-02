@@ -171,10 +171,21 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     excel_selection = namespace.excel_adapter
+    desktop_selection = namespace.desktop_adapter
     media_selection = namespace.media_adapter
     browser_selection = namespace.browser_adapter
     discord_selection = namespace.discord_adapter
     speech_selection = namespace.speech_provider
+    if (
+        namespace.window
+        and not any(
+            argument == "--desktop-adapter" or argument.startswith("--desktop-adapter=")
+            for argument in raw_args
+        )
+        and "VOICE_CONTROL_USB_DESKTOP_ADAPTER" not in os.environ
+        and sys.platform == "win32"
+    ):
+        desktop_selection = "windows"
     if (
         namespace.window
         and not any(
@@ -238,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     browser = None
     try:
         excel = create_excel_adapter(excel_selection)
-        desktop = create_desktop_adapter(namespace.desktop_adapter)
+        desktop = create_desktop_adapter(desktop_selection)
         media = create_media_adapter(media_selection)
         browser = create_browser_adapter(
             browser_selection,
