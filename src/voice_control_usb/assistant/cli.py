@@ -10,6 +10,7 @@ import sys
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
+from voice_control_usb.core.audit import JsonlAuditStore
 from voice_control_usb.desktop.factory import create_desktop_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
 from voice_control_usb.runtime_support import (
@@ -116,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             proposal_path=runtime_paths.proposal_path,
             excel=excel,
             desktop=desktop,
+            audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
         if namespace.session:
             if namespace.input_mode == "speech":

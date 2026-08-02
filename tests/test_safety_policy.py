@@ -4,12 +4,44 @@ from __future__ import annotations
 
 import unittest
 
+from voice_control_usb.core.capabilities import ActionSpec, CapabilityRegistry, SafetyClass
 from voice_control_usb.core.models import Command
-from voice_control_usb.core.safety import SafetyClass, SafetyPolicy
+from voice_control_usb.core.safety import SafetyPolicy
 from voice_control_usb.core.workflows import WorkflowRegistry
 
 
 class SafetyPolicyTests(unittest.TestCase):
+    def test_running_assistant_policy_uses_declared_capability_safety(self) -> None:
+        catalog = CapabilityRegistry(
+            [
+                ActionSpec(
+                    capability_id="privacy",
+                    action_id="enable_camera",
+                    description="Enable the camera.",
+                    safety_class=SafetyClass.REQUIRES_CONFIRMATION,
+                )
+            ]
+        )
+        policy = SafetyPolicy(WorkflowRegistry.from_data({}), catalog)
+
+        decision = policy.classify(
+            Command(
+                name="enable_camera",
+                action="enable_camera",
+                source_text="turn camera on",
+            )
+        )
+
+        self.assertIs(decision.safety_class, SafetyClass.REQUIRES_CONFIRMATION)
+
+    def test_unknown_catalog_action_is_blocked(self) -> None:
+        policy = SafetyPolicy(WorkflowRegistry.from_data({}), CapabilityRegistry())
+
+        decision = policy.classify(Command(name="unknown", action="unknown"))
+
+        self.assertIs(decision.safety_class, SafetyClass.BLOCKED)
+        self.assertEqual(decision.message, "Action is not approved: unknown")
+
     def test_safe_action_is_allowed(self) -> None:
         policy = SafetyPolicy(WorkflowRegistry.load_default())
 

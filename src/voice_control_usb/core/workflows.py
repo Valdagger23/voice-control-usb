@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from voice_control_usb.core.capabilities import CapabilityRegistry
+from voice_control_usb.core.models import Command
 from voice_control_usb.runtime_support import resolve_packaged_data_path
 
 
@@ -15,7 +17,7 @@ class WorkflowStep:
     """Single deterministic action inside a workflow."""
 
     action: str
-    arguments: dict[str, str] = field(default_factory=dict)
+    arguments: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,5 +82,25 @@ class WorkflowRegistry:
                     )
                 if not isinstance(step.arguments, dict):
                     raise ValueError(
-                        f"Workflow '{workflow.name}' step arguments must be a string map."
+                        f"Workflow '{workflow.name}' step arguments must be an argument map."
                     )
+
+    def validate_contracts(self, action_catalog: CapabilityRegistry) -> None:
+        """Validate workflow steps against registered typed action contracts."""
+
+        self.validate(action_catalog.action_ids(executable_only=True))
+        for workflow in self.workflows.values():
+            for index, step in enumerate(workflow.steps, start=1):
+                try:
+                    action_catalog.validate_command(
+                        Command(
+                            name=f"{workflow.name}_step_{index}",
+                            action=step.action,
+                            arguments=step.arguments,
+                            source_text=workflow.name,
+                        )
+                    )
+                except ValueError as error:
+                    raise ValueError(
+                        f"Workflow '{workflow.name}' step {index} is invalid: {error}"
+                    ) from error

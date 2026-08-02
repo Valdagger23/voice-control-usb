@@ -3,18 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
+from voice_control_usb.core.capabilities import CapabilityRegistry, SafetyClass
 from voice_control_usb.core.models import Command
 from voice_control_usb.core.workflows import WorkflowRegistry
-
-
-class SafetyClass(str, Enum):
-    ALLOWED = "allowed"
-    REQUIRES_CONFIRMATION = "requires_confirmation"
-    BLOCKED = "blocked"
-    CONFIRM = "confirm"
-    CANCEL = "cancel"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,8 +20,13 @@ class SafetyDecision:
 class SafetyPolicy:
     """Classify parsed commands before execution."""
 
-    def __init__(self, workflow_registry: WorkflowRegistry) -> None:
+    def __init__(
+        self,
+        workflow_registry: WorkflowRegistry,
+        action_catalog: CapabilityRegistry | None = None,
+    ) -> None:
         self.workflow_registry = workflow_registry
+        self.action_catalog = action_catalog
 
     def classify(self, command: Command) -> SafetyDecision:
         return self._classify_action(command.action, command.arguments, command.source_text)
@@ -37,26 +34,37 @@ class SafetyPolicy:
     def _classify_action(
         self,
         action: str,
-        arguments: dict[str, str],
+        arguments: dict[str, object],
         source_text: str,
     ) -> SafetyDecision:
-        if action == "confirm_pending":
-            return SafetyDecision(SafetyClass.CONFIRM)
-        if action == "cancel_pending":
-            return SafetyDecision(SafetyClass.CANCEL)
-        if action == "blocked_desktop_action":
+        safety_class = self._declared_safety_class(action)
+        if safety_class is SafetyClass.CONFIRM:
+            return SafetyDecision(safety_class)
+        if safety_class is SafetyClass.CANCEL:
+            return SafetyDecision(safety_class)
+        if safety_class is SafetyClass.BLOCKED:
+            if action != "blocked_desktop_action":
+                return SafetyDecision(
+                    safety_class,
+                    f"Action is not approved: {action}",
+                )
             request = arguments.get("request", source_text)
             return SafetyDecision(
-                SafetyClass.BLOCKED,
+                safety_class,
                 f"Desktop action is blocked in MVP: {request}",
             )
-        if action in {"shutdown", "restart"}:
+        if safety_class is SafetyClass.REQUIRES_CONFIRMATION:
             return SafetyDecision(
-                SafetyClass.REQUIRES_CONFIRMATION,
+                safety_class,
                 f"Confirmation required for risky action: {source_text}. Type confirm to proceed or cancel.",
             )
         if action == "run_workflow":
-            workflow_name = arguments["workflow_name"]
+            workflow_name = arguments.get("workflow_name")
+            if not isinstance(workflow_name, str):
+                return SafetyDecision(
+                    SafetyClass.BLOCKED,
+                    "Workflow name must be a string.",
+                )
             workflow = self.workflow_registry.get(workflow_name)
             if workflow is None:
                 return SafetyDecision(
@@ -79,4 +87,23 @@ class SafetyPolicy:
                     )
             return highest
 
-        return SafetyDecision(SafetyClass.ALLOWED)
+        return SafetyDecision(safety_class)
+
+    def _declared_safety_class(self, action: str) -> SafetyClass:
+        if self.action_catalog is not None:
+            spec = self.action_catalog.spec_for(action)
+            if spec is None:
+                return SafetyClass.BLOCKED
+            return spec.safety_class
+
+        # Transitional compatibility for direct SafetyPolicy users. The running
+        # assistant always supplies the capability catalog as the source of truth.
+        if action == "confirm_pending":
+            return SafetyClass.CONFIRM
+        if action == "cancel_pending":
+            return SafetyClass.CANCEL
+        if action == "blocked_desktop_action":
+            return SafetyClass.BLOCKED
+        if action in {"shutdown", "restart"}:
+            return SafetyClass.REQUIRES_CONFIRMATION
+        return SafetyClass.ALLOWED

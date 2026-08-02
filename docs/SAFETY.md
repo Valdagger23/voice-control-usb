@@ -27,6 +27,10 @@
 - Allow workflows to reuse only existing approved actions from the deterministic engine.
 - Do not allow nested workflows or arbitrary execution hooks in workflow definitions.
 - Apply the same safety policy to workflow steps so a risky step cannot bypass confirmation.
+- Treat capability action metadata as the running source of truth for allowed, confirmation-required, and blocked classifications.
+- Reject unregistered actions and arguments that do not satisfy their declared types.
+- Validate workflow step contracts at startup before any workflow can partially execute.
+- Record supported, blocked, confirmation, cancellation, failure, and unsupported outcomes in the structured audit log.
 
 ## Confirmation flow
 - One-shot mode never executes confirm-required actions immediately.

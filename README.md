@@ -4,12 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 0 is the approved product and architecture reset.
+Phase 1 capability-core implementation is complete on top of the approved Phase 0 reset.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control is the first vertical slice.
 - Media/Spotify, browser/Google, and Discord capabilities follow after Excel is proven on Windows.
-- Current runtime behavior still reflects the earlier prototype until the phased refactor begins.
+- Existing user-visible command behavior is preserved behind capability-neutral contracts.
+- The next implementation phase is the native Windows Excel vertical slice.
 
 Planning documents:
 
@@ -19,6 +20,7 @@ Planning documents:
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Safety model](docs/SAFETY.md)
 - [Phase 0 baseline](docs/PHASE_0_BASELINE.md)
+- [Phase 1 baseline](docs/PHASE_1_BASELINE.md)
 
 ## Existing prototype
 
@@ -30,6 +32,15 @@ The repository currently provides a tested deterministic foundation:
 - Excel adapter boundary
 - unsupported-command proposal logging
 - tests
+
+Phase 1 additionally provides:
+
+- typed capability action contracts and argument validation
+- capability-owned Excel and desktop action declarations
+- structured execution results
+- capability-driven safety metadata
+- application-neutral session context
+- structured JSONL audit events at `runtime/audit/events.jsonl`
 
 ## Development environment
 - Active repository: `D:\VoiceControl`

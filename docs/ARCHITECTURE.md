@@ -72,3 +72,14 @@ Begins with visible, user-initiated navigation and state-aware microphone/camera
 - WSL or cross-platform Python may run deterministic unit tests against stubs.
 - Windows-sensitive code remains behind narrow interfaces.
 - Each phase must preserve the existing test baseline while adding contract and integration coverage.
+
+## Phase 1 implementation map
+
+- `core.capabilities` defines action specifications, bindings, typed argument validation, structured results, and the central registry.
+- `excel.capability` and `desktop.capability` own their action contracts and adapter bindings.
+- `core.builtin_capabilities` owns assistant controls and deterministic workflow expansion.
+- `executor.engine` composes capabilities and preserves the existing string-returning compatibility boundary.
+- `core.session_context` stores pending confirmation and namespaced future capability state without importing Excel.
+- `core.audit` defines structured events plus JSONL and in-memory stores.
+- `core.safety` reads safety classes from the running capability catalog; its legacy fallback remains only for direct compatibility callers.
+- Workflow steps are validated against action existence and argument types during startup.

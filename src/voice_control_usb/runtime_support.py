@@ -77,6 +77,10 @@ class AssistantRuntimePaths:
         return self.runtime_dir / "proposals" / "unsupported_commands.jsonl"
 
     @property
+    def audit_path(self) -> Path:
+        return self.runtime_dir / "audit" / "events.jsonl"
+
+    @property
     def lock_path(self) -> Path:
         return self.runtime_dir / "assistant.lock"
 

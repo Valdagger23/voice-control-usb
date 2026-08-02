@@ -4,7 +4,7 @@
 This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-Phase 0 product and architecture reset is approved. The existing deterministic runtime is a tested prototype and must remain behaviorally stable while the capability-based architecture is introduced incrementally.
+Phase 1 capability-core implementation is complete. The deterministic runtime now routes through typed capability contracts while preserving the earlier user-visible behavior. Phase 2 is the basic Excel vertical slice on native Windows.
 
 Do not broaden implementation scope before the basic Excel vertical slice works on native Windows.
 
@@ -34,6 +34,9 @@ Do not store account tokens as plaintext on the USB.
 - Keep desktop starter and main assistant separate.
 - Keep the assistant core independent of Excel and every other individual capability.
 - Add Windows features through explicit capability interfaces with declared actions and safety classes.
+- Keep action specifications beside their owning capability and bind them through `CapabilityRegistry`.
+- Return structured `ActionResult` values at the capability boundary; unwrap messages only at compatibility/UI boundaries.
+- Record command decisions and outcomes through the audit-store boundary.
 - Use COM/object-level Excel control before keyboard/mouse fallbacks.
 - Keep command handling deterministic and testable.
 - AI-assisted command generation must produce proposals, not live unsafe rewrites.

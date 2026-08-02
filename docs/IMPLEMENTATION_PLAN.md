@@ -20,6 +20,8 @@ Exit: the USB repository is the active clean baseline, documentation agrees on t
 
 Goal: make the core capability-neutral without changing visible prototype behavior.
 
+Status: complete on the `agent/phase-1-capability-core` branch.
+
 - Introduce capability and action identifiers, typed arguments, structured results, and audit events.
 - Separate application-neutral session context from Excel state.
 - Add a capability registry and declared action safety metadata.

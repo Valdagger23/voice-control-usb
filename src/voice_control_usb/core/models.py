@@ -11,7 +11,7 @@ class Command:
 
     name: str
     action: str
-    arguments: dict[str, str] = field(default_factory=dict)
+    arguments: dict[str, object] = field(default_factory=dict)
     source_text: str = ""
 
 

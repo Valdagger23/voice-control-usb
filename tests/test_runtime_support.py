@@ -30,6 +30,10 @@ class RuntimeSupportTests(unittest.TestCase):
                 runtime_paths.proposal_path,
                 (usb_root / "runtime" / "proposals" / "unsupported_commands.jsonl").resolve(),
             )
+            self.assertEqual(
+                runtime_paths.audit_path,
+                (usb_root / "runtime" / "audit" / "events.jsonl").resolve(),
+            )
 
     def test_assistant_runtime_paths_reject_missing_usb_root(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Configured USB root does not exist"):
