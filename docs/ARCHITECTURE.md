@@ -60,7 +60,7 @@ Uses the Windows Global System Media Transport Controls current-session API for 
 
 ### Browser and Google
 
-Begins with visible browser navigation and Google search. Private Google services use separate OAuth-backed adapters with least-privilege scopes.
+Uses Playwright with an assistant-owned persistent Chrome or Edge profile. The adapter reports pages, tabs, and safe visible anchors through object-level browser APIs. Numbered links are reopened as verified HTTP(S) navigation rather than DOM clicks. Form controls, downloads, purchases, and outgoing messages are outside this capability. Private Google services remain a separate future OAuth boundary.
 
 ### Discord
 

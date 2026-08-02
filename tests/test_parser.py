@@ -6,6 +6,30 @@ from voice_control_usb.core.parser import CommandParser
 
 
 class CommandParserTests(unittest.TestCase):
+    def test_parse_browser_and_google_commands(self) -> None:
+        parser = CommandParser()
+        cases = [
+            ("browse to https://example.com", "browser_open_url", {"url": "https://example.com"}),
+            ("google weather in cork", "google_search", {"query": "weather in cork"}),
+            ("new browser tab", "browser_new_tab", {}),
+            ("close browser tab", "browser_close_tab", {}),
+            ("switch to browser tab 2", "browser_switch_tab", {"index": 2}),
+            ("go back", "browser_back", {}),
+            ("go forward", "browser_forward", {}),
+            ("refresh page", "browser_refresh", {}),
+            ("scroll page down", "browser_scroll", {"direction": "down"}),
+            ("report current page", "browser_report_page", {}),
+            ("list browser tabs", "browser_list_tabs", {}),
+            ("list visible links", "browser_list_links", {}),
+            ("open link 3", "browser_open_link", {"index": 3}),
+        ]
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
     def test_parse_media_commands(self) -> None:
         parser = CommandParser()
         cases = [

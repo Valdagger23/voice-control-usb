@@ -8,11 +8,26 @@ import tempfile
 import unittest
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.browser.adapter import StubBrowserAdapter
 from voice_control_usb.excel.adapter import StubExcelAdapter
 from voice_control_usb.media.adapter import StubMediaAdapter
 
 
 class AssistantAppTests(unittest.TestCase):
+    def test_app_handles_visible_browser_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            browser = StubBrowserAdapter()
+            app = AssistantApp(
+                proposal_path=Path(tmp_dir) / "unsupported.jsonl",
+                browser=browser,
+            )
+
+            search = app.handle_text("google voice control windows")
+            page = app.handle_text("report current page")
+
+            self.assertIn("Google search opened", search)
+            self.assertIn("google.com/search", page)
+
     def test_app_handles_media_commands_without_changing_proposal_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"

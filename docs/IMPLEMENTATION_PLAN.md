@@ -77,11 +77,15 @@ Exit: native Windows play/pause and state reporting work through the shared comm
 
 Goal: provide visible, deterministic browser navigation.
 
+Status: complete on the `agent/phase-5-browser-google` branch.
+
 - Open approved URLs and Google searches.
 - Manage tabs, history, refresh, scrolling, and visible link selection.
 - Report page identity and visible state needed for safe interaction.
 - Gate form submissions, downloads, purchases, and outgoing messages appropriately.
 - Add private Google-service adapters separately using least-privilege OAuth scopes.
+
+Exit: a separate visible browser profile supports deterministic navigation and Google search, exposes page and link state, and provides no path for silent forms, downloads, purchases, or outgoing messages.
 
 ## Phase 6 — Discord
 

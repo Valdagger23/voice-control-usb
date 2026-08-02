@@ -13,6 +13,87 @@
       "pattern": "^(?:play|resume)(?: media| music)?$"
     },
     {
+      "name": "browser_open_url",
+      "action": "browser_open_url",
+      "description": "Open a complete URL in the assistant-controlled browser.",
+      "pattern": "^(?:browse|navigate) to (?P<url>https?://\\S+)$"
+    },
+    {
+      "name": "google_search",
+      "action": "google_search",
+      "description": "Open a visible Google search.",
+      "pattern": "^(?:google|search google for) (?P<query>.+)$",
+      "argument_transforms": {"query": "strip"}
+    },
+    {
+      "name": "browser_new_tab",
+      "action": "browser_new_tab",
+      "description": "Open a new assistant-controlled browser tab.",
+      "pattern": "^new browser tab$"
+    },
+    {
+      "name": "browser_close_tab",
+      "action": "browser_close_tab",
+      "description": "Close the current assistant-controlled browser tab.",
+      "pattern": "^close browser tab$"
+    },
+    {
+      "name": "browser_switch_tab",
+      "action": "browser_switch_tab",
+      "description": "Switch to a numbered assistant-controlled browser tab.",
+      "pattern": "^switch to browser tab (?P<index>[1-9][0-9]*)$",
+      "argument_transforms": {"index": "positive_integer"}
+    },
+    {
+      "name": "browser_back",
+      "action": "browser_back",
+      "description": "Navigate backward in the current browser tab.",
+      "pattern": "^(?:browser |go )back$"
+    },
+    {
+      "name": "browser_forward",
+      "action": "browser_forward",
+      "description": "Navigate forward in the current browser tab.",
+      "pattern": "^(?:browser |go )forward$"
+    },
+    {
+      "name": "browser_refresh",
+      "action": "browser_refresh",
+      "description": "Refresh the current browser page.",
+      "pattern": "^(?:refresh|reload)(?: page)?$"
+    },
+    {
+      "name": "browser_scroll",
+      "action": "browser_scroll",
+      "description": "Scroll the current browser page up or down.",
+      "pattern": "^scroll(?: page)? (?P<direction>up|down)$"
+    },
+    {
+      "name": "browser_report_page",
+      "action": "browser_report_page",
+      "description": "Report the current browser page identity.",
+      "pattern": "^(?:report )?(?:browser |current )?page$"
+    },
+    {
+      "name": "browser_list_tabs",
+      "action": "browser_list_tabs",
+      "description": "List assistant-controlled browser tabs.",
+      "pattern": "^list browser tabs$"
+    },
+    {
+      "name": "browser_list_links",
+      "action": "browser_list_links",
+      "description": "List safe visible navigation links on the current page.",
+      "pattern": "^list(?: visible)? links$"
+    },
+    {
+      "name": "browser_open_link",
+      "action": "browser_open_link",
+      "description": "Open a numbered link from the latest visible link list.",
+      "pattern": "^open link (?P<index>[1-9][0-9]*)$",
+      "argument_transforms": {"index": "positive_integer"}
+    },
+    {
       "name": "pause_media",
       "action": "pause_media",
       "description": "Pause the current media session.",

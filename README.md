@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 4 media and Spotify control is complete on top of the native Excel and push-to-talk slices.
+Phase 5 visible browser and Google control is complete on top of the native Excel, speech, and media slices.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
-- Windows media and speaker control now use native Windows APIs; browser/Google and Discord follow next.
+- Windows media plus visible browser and Google navigation now use dedicated native adapters; Discord follows next.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is visible browser and Google control.
+- The next implementation phase is deliberate Discord navigation, messaging, microphone, and camera control.
 
 Planning documents:
 
@@ -24,6 +24,7 @@ Planning documents:
 - [Phase 2 baseline](docs/PHASE_2_BASELINE.md)
 - [Phase 3 baseline](docs/PHASE_3_BASELINE.md)
 - [Phase 4 baseline](docs/PHASE_4_BASELINE.md)
+- [Phase 5 baseline](docs/PHASE_5_BASELINE.md)
 
 ## Existing prototype
 
@@ -70,6 +71,13 @@ Phase 4 additionally provides:
 - deterministic media commands available through typed input and the existing push-to-talk path
 - optional Spotify Authorization Code with PKCE setup using only playback scopes
 - Spotify refresh-token storage in Windows Credential Manager; no token is written to the repository or USB runtime
+
+Phase 5 additionally provides:
+
+- a visible assistant-controlled Chrome or Edge session with its own persistent profile
+- direct URL navigation, Google search, tabs, history, refresh, scrolling, and page identity reporting
+- safe visible-link listing and numbered navigation without clicking page buttons or controls
+- download links excluded and no form submission, purchase, or outgoing-message actions
 
 ## Development environment
 - Active repository: `D:\VoiceControl`
@@ -122,6 +130,15 @@ py -3 -m venv .venv
 - Push-to-talk speech mode: `--session --input-mode speech --speech-activation ptt` uses Enter as the recording trigger in terminal sessions
 - Safety flow: safe commands run immediately, risky commands raise a clear `[CONFIRMATION REQUIRED]` alert, `status` reports pending confirmation state, and blocked MVP actions still do not execute
 
+## Browser adapter selection
+
+- Default: deterministic stub for tests and cross-platform development
+- Native visible adapter: `--browser-adapter playwright`
+- Browser choice: `--browser-channel chrome|msedge`
+- Visible Windows mode selects Playwright with Chrome by default
+- Browser profile: `%LOCALAPPDATA%\VoiceControlUSB\browser-profile`, local to the prepared Windows host and separate from the USB and everyday browser profile
+- Details: [docs/BROWSER_GOOGLE.md](docs/BROWSER_GOOGLE.md)
+
 ## Workflows
 - Approved multi-step macros are registry-driven
 - Workflow phrases expand into existing deterministic actions only
@@ -135,6 +152,7 @@ Windows baseline:
 - `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_speech.py`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_media.py --exercise-play-pause`
+- `.\.venv\Scripts\python.exe scripts\verify_windows_browser.py`
 - `.\.venv\Scripts\python.exe -m voice_control_usb --window`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel"`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel and go to A1"`

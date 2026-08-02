@@ -4,9 +4,9 @@
 This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-Phase 4 media and Spotify control is complete. Native Windows media-session and speaker control now run through a dedicated capability, and optional Spotify PKCE authorization stores its refresh token in Windows Credential Manager. Phase 5 visible browser and Google control is next.
+Phase 5 browser and Google control is complete. A visible isolated Chrome or Edge profile now supports deterministic navigation, Google search, tabs, history, page reporting, scrolling, and safe numbered links without form or download actions. Phase 6 Discord is next.
 
-Do not broaden implementation scope beyond browser and Google until the Phase 5 visible navigation workflow works on native Windows.
+Do not broaden implementation scope beyond Discord until the Phase 6 deliberate messaging and device-state workflow works on native Windows.
 
 ## Primary goal
 Build a reliable modular system with these layers:

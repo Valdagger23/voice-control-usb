@@ -76,6 +76,8 @@ class CommandParser:
                 transformed[argument] = self._excel_cell(value)
             elif transform == "percentage":
                 transformed[argument] = self._percentage(value)
+            elif transform == "positive_integer":
+                transformed[argument] = self._positive_integer(value)
             else:
                 raise ValueError(f"Unknown command argument transform: {transform}")
         return transformed
@@ -111,6 +113,13 @@ class CommandParser:
         if not 0 <= percent <= 100:
             raise ValueError("Percentage must be between 0 and 100.")
         return percent
+
+    @staticmethod
+    def _positive_integer(value: str) -> int:
+        number = int(value)
+        if number < 1:
+            raise ValueError("Number must be at least 1.")
+        return number
 
     def _unsupported(self, text: str, reason: str) -> ParseResult:
         return ParseResult(

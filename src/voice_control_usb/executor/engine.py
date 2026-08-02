@@ -6,6 +6,8 @@ from voice_control_usb.core.builtin_capabilities import (
     WorkflowCapability,
     assistant_action_specs,
 )
+from voice_control_usb.browser.adapter import BrowserAdapter, StubBrowserAdapter
+from voice_control_usb.browser.capability import BrowserCapability
 from voice_control_usb.core.capabilities import (
     ActionBinding,
     ActionResult,
@@ -30,12 +32,14 @@ class ExecutionEngine:
         excel: ExcelAdapter,
         desktop: DesktopAdapter,
         media: MediaAdapter | None = None,
+        browser: BrowserAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         # Compatibility views retained while callers migrate to capabilities.
         self.excel = excel
         self.desktop = desktop
         self.media = media or StubMediaAdapter()
+        self.browser = browser or StubBrowserAdapter()
         self.handlers = {}
 
         self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
@@ -45,6 +49,7 @@ class ExecutionEngine:
         self._register_capability(ExcelCapability(excel))
         self._register_capability(DesktopCapability(desktop))
         self._register_capability(MediaCapability(self.media))
+        self._register_capability(BrowserCapability(self.browser))
         self.workflow_registry.validate_contracts(self.registry)
         self._register_capability(
             WorkflowCapability(

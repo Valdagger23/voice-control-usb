@@ -68,6 +68,16 @@
 - Keep the Spotify access token in memory and store only the refresh token in Windows Credential Manager.
 - Never copy Spotify tokens to the repository, USB runtime, audit log, or console output.
 
+## Browser and Google safety
+
+- Use a separate assistant-owned browser profile; never automate the user's default Chrome or Edge profile.
+- Keep browser activity visible and report the current title, URL, and tab position.
+- Allow only complete HTTP(S) URLs and encoded Google search queries.
+- List only visible HTTP(S) anchors, exclude download links, cap the list, and require a fresh snapshot before numbered navigation.
+- Open numbered links as direct verified navigation rather than clicking DOM elements or executing page handlers.
+- Do not expose form filling, submission, downloads, purchases, sign-in controls, or outgoing-message actions in Phase 5.
+- Keep private Google data outside general browser control; add a separate least-privilege OAuth adapter if required later.
+
 ## Communication and privacy safety
 
 - Draft outgoing messages visibly and require explicit confirmation before sending.

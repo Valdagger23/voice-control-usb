@@ -12,6 +12,7 @@ from voice_control_usb.core.audit import (
     AuditStore,
     JsonlAuditStore,
 )
+from voice_control_usb.browser.adapter import BrowserAdapter, StubBrowserAdapter
 from voice_control_usb.core.models import Command
 from voice_control_usb.core.parser import CommandParser
 from voice_control_usb.core.proposals import ProposalStore
@@ -35,6 +36,7 @@ class AssistantApp:
         excel: ExcelAdapter | None = None,
         desktop: DesktopAdapter | None = None,
         media: MediaAdapter | None = None,
+        browser: BrowserAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
         pending_action_timeout_seconds: float | None = None,
         clock: Callable[[], float] | None = None,
@@ -47,6 +49,7 @@ class AssistantApp:
             excel=excel or StubExcelAdapter(),
             desktop=desktop or StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
             media=media or StubMediaAdapter(),
+            browser=browser or StubBrowserAdapter(),
             workflow_registry=self.workflow_registry,
         )
         self.safety = SafetyPolicy(self.workflow_registry, self.executor.registry)

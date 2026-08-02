@@ -11,6 +11,10 @@ from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.assistant.windows_shell import run_windows_shell
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
+from voice_control_usb.browser.factory import (
+    create_browser_adapter,
+    default_browser_profile_dir,
+)
 from voice_control_usb.core.audit import JsonlAuditStore
 from voice_control_usb.desktop.factory import create_desktop_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
@@ -49,6 +53,18 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("VOICE_CONTROL_USB_MEDIA_ADAPTER", "stub"),
         choices=("stub", "windows"),
         help="Select the media adapter implementation.",
+    )
+    parser.add_argument(
+        "--browser-adapter",
+        default=os.environ.get("VOICE_CONTROL_USB_BROWSER_ADAPTER", "stub"),
+        choices=("stub", "playwright"),
+        help="Select the visible browser adapter implementation.",
+    )
+    parser.add_argument(
+        "--browser-channel",
+        default=os.environ.get("VOICE_CONTROL_USB_BROWSER_CHANNEL", "chrome"),
+        choices=("chrome", "msedge"),
+        help="Choose Chrome or Edge for the assistant-controlled browser.",
     )
     parser.add_argument(
         "--session",
@@ -148,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
 
     excel_selection = namespace.excel_adapter
     media_selection = namespace.media_adapter
+    browser_selection = namespace.browser_adapter
     speech_selection = namespace.speech_provider
     if (
         namespace.window
@@ -169,6 +186,16 @@ def main(argv: list[str] | None = None) -> int:
         and sys.platform == "win32"
     ):
         media_selection = "windows"
+    if (
+        namespace.window
+        and not any(
+            argument == "--browser-adapter" or argument.startswith("--browser-adapter=")
+            for argument in raw_args
+        )
+        and "VOICE_CONTROL_USB_BROWSER_ADAPTER" not in os.environ
+        and sys.platform == "win32"
+    ):
+        browser_selection = "playwright"
     if speech_selection == "auto":
         speech_selection = "windows_sapi" if sys.platform == "win32" else "stub"
 
@@ -188,10 +215,20 @@ def main(argv: list[str] | None = None) -> int:
         print(str(error))
         return 3
 
+    browser = None
     try:
         excel = create_excel_adapter(excel_selection)
         desktop = create_desktop_adapter(namespace.desktop_adapter)
         media = create_media_adapter(media_selection)
+        browser = create_browser_adapter(
+            browser_selection,
+            profile_dir=(
+                default_browser_profile_dir()
+                if browser_selection == "playwright"
+                else None
+            ),
+            channel=namespace.browser_channel,
+        )
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
         print(f"Assistant startup failed: {error}")
@@ -203,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
             excel=excel,
             desktop=desktop,
             media=media,
+            browser=browser,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
         if namespace.window:
@@ -235,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Assistant startup failed: {error}")
         return 2
     finally:
+        if browser is not None:
+            with suppress(Exception):
+                browser.close()
         with suppress(Exception):
             instance_guard.release()
 

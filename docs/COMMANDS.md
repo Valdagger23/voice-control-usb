@@ -13,6 +13,26 @@
 
 ## Supported commands
 
+### Browser and Google commands
+
+- `browse to https://example.com`
+- `google <search terms>`
+- `search google for <search terms>`
+- `new browser tab`
+- `close browser tab`
+- `switch to browser tab <NUMBER>`
+- `go back`
+- `go forward`
+- `refresh page`
+- `scroll page up`
+- `scroll page down`
+- `report current page`
+- `list browser tabs`
+- `list visible links`
+- `open link <NUMBER>`
+
+`list visible links` returns at most ten visible HTTP(S) navigation links and excludes anchors marked as downloads. `open link <NUMBER>` only works against that fresh page snapshot and navigates directly to the recorded URL. It does not click buttons, submit forms, start purchases, download files, or send messages.
+
 ### Media and speaker commands
 
 - `play media` or `play music`
