@@ -1,4 +1,4 @@
-"""Small native Windows shell for typed and controlled speech input."""
+"""Modern native Windows shell for typed and controlled speech input."""
 
 from __future__ import annotations
 
@@ -7,6 +7,10 @@ from threading import Thread
 from typing import Callable
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.assistant.command_legend import (
+    COMMAND_SECTIONS,
+    filter_command_sections,
+)
 from voice_control_usb.assistant.speech_flow import (
     dispatch_transcription,
     record_speech_failure,
@@ -17,87 +21,498 @@ from voice_control_usb.audio.transcriber import (
 )
 
 
+def _enable_dark_title_bar(root: object) -> None:
+    """Ask modern Windows versions to draw the native title bar in dark mode."""
+
+    import ctypes
+    import sys
+
+    if sys.platform != "win32":
+        return
+    try:
+        root.update_idletasks()  # type: ignore[attr-defined]
+        handle = ctypes.windll.user32.GetParent(root.winfo_id())  # type: ignore[attr-defined]
+        enabled = ctypes.c_int(1)
+        for attribute in (20, 19):
+            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                handle,
+                attribute,
+                ctypes.byref(enabled),
+                ctypes.sizeof(enabled),
+            )
+            if result == 0:
+                break
+    except (AttributeError, OSError):
+        # Older Windows builds can simply retain their system title-bar theme.
+        return
+
+
 def run_windows_shell(
     app: AssistantApp,
     transcriber: SpeechTranscriber,
     shutdown_requested: Callable[[], bool] | None = None,
 ) -> None:
-    """Run a visible typed and push-to-talk window against the shared pipeline."""
+    """Run the visible command deck and push-to-talk assistant window."""
 
     import tkinter as tk
     from tkinter import ttk
 
+    colors = {
+        "window": "#060A12",
+        "sidebar": "#0A1020",
+        "panel": "#0D1526",
+        "card": "#111C30",
+        "card_hover": "#17243B",
+        "border": "#22304A",
+        "text": "#E8F1FF",
+        "muted": "#8EA3BF",
+        "faint": "#5E7390",
+        "cyan": "#38BDF8",
+        "teal": "#22D3A7",
+        "purple": "#A78BFA",
+        "amber": "#F59E0B",
+        "pink": "#F472B6",
+        "danger": "#FB7185",
+    }
+
     root = tk.Tk()
-    root.title("Voice Control Assistant")
-    root.geometry("780x580")
-    root.minsize(640, 460)
+    root.title("Voice Control // Command Console")
+    root.geometry("1220x760")
+    root.minsize(980, 620)
+    root.configure(background=colors["window"])
+    root.option_add("*Font", ("Segoe UI", 10))
+    root.option_add("*TCombobox*Listbox.background", colors["card"])
+    root.option_add("*TCombobox*Listbox.foreground", colors["text"])
+    root.option_add("*TCombobox*Listbox.selectBackground", colors["cyan"])
+    root.option_add("*TCombobox*Listbox.selectForeground", colors["window"])
+    _enable_dark_title_bar(root)
 
-    frame = ttk.Frame(root, padding=18)
-    frame.pack(fill="both", expand=True)
-
-    ttk.Label(frame, text="Windows Assistant", font=("Segoe UI", 18, "bold")).pack(
-        anchor="w"
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    style.configure(
+        "Console.TCombobox",
+        fieldbackground=colors["card"],
+        background=colors["card"],
+        foreground=colors["text"],
+        arrowcolor=colors["cyan"],
+        bordercolor=colors["border"],
+        lightcolor=colors["border"],
+        darkcolor=colors["border"],
+        padding=8,
     )
-    ttk.Label(
-        frame,
-        text="Excel, media, browser, and Discord - type or push to talk.",
-    ).pack(anchor="w", pady=(2, 14))
+    style.map(
+        "Console.TCombobox",
+        fieldbackground=[("readonly", colors["card"])],
+        foreground=[("readonly", colors["text"])],
+        selectbackground=[("readonly", colors["card"])],
+        selectforeground=[("readonly", colors["text"])],
+    )
 
-    status = tk.StringVar(value="Ready")
-    ttk.Label(frame, textvariable=status).pack(anchor="w", pady=(0, 8))
+    def make_dark_scrollbar(
+        parent: tk.Misc,
+        target: tk.Text | tk.Canvas,
+        trough_color: str,
+    ) -> tk.Canvas:
+        """Create a compact dark scrollbar independent of the Windows theme."""
 
-    transcript = tk.Text(frame, height=16, wrap="word", state="disabled")
-    transcript.pack(fill="both", expand=True)
+        bar = tk.Canvas(
+            parent,
+            width=9,
+            background=trough_color,
+            highlightthickness=0,
+            borderwidth=0,
+            cursor="hand2",
+        )
+        thumb = bar.create_rectangle(
+            2,
+            0,
+            7,
+            20,
+            fill=colors["border"],
+            outline="",
+        )
+        position = [0.0, 1.0]
+        drag_offset = [0.0]
 
-    microphone_row = ttk.Frame(frame)
-    microphone_row.pack(fill="x", pady=(12, 0))
-    ttk.Label(microphone_row, text="Microphone:").pack(side="left")
+        def redraw(_event: object | None = None) -> None:
+            height = max(bar.winfo_height(), 1)
+            top = position[0] * height
+            bottom = position[1] * height
+            bar.coords(thumb, 2, top, 7, max(bottom, top + 18))
+            bar.itemconfigure(
+                thumb,
+                state="hidden" if position == [0.0, 1.0] else "normal",
+            )
+
+        def sync(first: str, last: str) -> None:
+            position[:] = [float(first), float(last)]
+            redraw()
+
+        def move_to_pointer(event: tk.Event[tk.Misc]) -> None:
+            height = max(bar.winfo_height(), 1)
+            visible_fraction = position[1] - position[0]
+            target.yview_moveto(
+                max(
+                    0.0,
+                    min(
+                        1.0 - visible_fraction,
+                        (event.y - drag_offset[0]) / height,
+                    ),
+                )
+            )
+
+        def begin_drag(event: tk.Event[tk.Misc]) -> None:
+            height = max(bar.winfo_height(), 1)
+            top = position[0] * height
+            bottom = position[1] * height
+            drag_offset[0] = (
+                event.y - top if top <= event.y <= bottom else (bottom - top) / 2
+            )
+            move_to_pointer(event)
+
+        bar.bind("<Configure>", redraw)
+        bar.bind("<Button-1>", begin_drag)
+        bar.bind("<B1-Motion>", move_to_pointer)
+        bar.bind(
+            "<Enter>",
+            lambda _event: bar.itemconfigure(thumb, fill=colors["faint"]),
+        )
+        bar.bind(
+            "<Leave>",
+            lambda _event: bar.itemconfigure(thumb, fill=colors["border"]),
+        )
+        target.configure(yscrollcommand=sync)
+        return bar
+
+    shell = tk.Frame(root, background=colors["window"])
+    shell.pack(fill="both", expand=True)
+    shell.grid_rowconfigure(0, weight=1)
+    shell.grid_columnconfigure(1, weight=1)
+
+    # Command deck sidebar.
+    sidebar = tk.Frame(
+        shell,
+        width=370,
+        background=colors["sidebar"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    sidebar.grid(row=0, column=0, sticky="nsew")
+    sidebar.grid_propagate(False)
+    sidebar.grid_columnconfigure(0, weight=1)
+    sidebar.grid_rowconfigure(5, weight=1)
+
+    brand = tk.Frame(sidebar, background=colors["sidebar"])
+    brand.grid(row=0, column=0, sticky="ew", padx=22, pady=(22, 4))
+    tk.Label(
+        brand,
+        text="VC // 01",
+        background=colors["teal"],
+        foreground=colors["window"],
+        font=("Consolas", 9, "bold"),
+        padx=7,
+        pady=3,
+    ).pack(side="left")
+    tk.Label(
+        brand,
+        text="COMMAND DECK",
+        background=colors["sidebar"],
+        foreground=colors["text"],
+        font=("Segoe UI Semibold", 15),
+    ).pack(side="left", padx=(10, 0))
+    tk.Label(
+        sidebar,
+        text="Every supported voice phrase, organized and ready to load.",
+        background=colors["sidebar"],
+        foreground=colors["muted"],
+        font=("Segoe UI", 9),
+        anchor="w",
+        justify="left",
+        wraplength=320,
+    ).grid(row=1, column=0, sticky="ew", padx=22, pady=(2, 16))
+
+    search_frame = tk.Frame(
+        sidebar,
+        background=colors["card"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    search_frame.grid(row=2, column=0, sticky="ew", padx=22)
+    tk.Label(
+        search_frame,
+        text="/",
+        background=colors["card"],
+        foreground=colors["cyan"],
+        font=("Consolas", 14, "bold"),
+    ).pack(side="left", padx=(11, 2), pady=8)
+    search_query = tk.StringVar()
+    search_entry = tk.Entry(
+        search_frame,
+        textvariable=search_query,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["cyan"],
+        selectbackground=colors["cyan"],
+        selectforeground=colors["window"],
+        relief="flat",
+        borderwidth=0,
+        font=("Segoe UI", 10),
+    )
+    search_entry.pack(side="left", fill="x", expand=True, padx=(4, 10), pady=8)
+
+    categories = tk.Frame(sidebar, background=colors["sidebar"])
+    categories.grid(row=3, column=0, sticky="ew", padx=18, pady=(14, 8))
+    active_category = tk.StringVar(value="All")
+    category_buttons: dict[str, tk.Button] = {}
+
+    result_summary = tk.StringVar(value="")
+    tk.Label(
+        sidebar,
+        textvariable=result_summary,
+        background=colors["sidebar"],
+        foreground=colors["faint"],
+        font=("Consolas", 8, "bold"),
+        anchor="w",
+    ).grid(row=4, column=0, sticky="ew", padx=22, pady=(2, 6))
+
+    legend_frame = tk.Frame(sidebar, background=colors["sidebar"])
+    legend_frame.grid(row=5, column=0, sticky="nsew", padx=(14, 8), pady=(0, 10))
+    legend_frame.grid_rowconfigure(0, weight=1)
+    legend_frame.grid_columnconfigure(0, weight=1)
+    legend_canvas = tk.Canvas(
+        legend_frame,
+        background=colors["sidebar"],
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    legend_scroll = make_dark_scrollbar(
+        legend_frame,
+        legend_canvas,
+        colors["sidebar"],
+    )
+    legend_canvas.grid(row=0, column=0, sticky="nsew")
+    legend_scroll.grid(row=0, column=1, sticky="ns")
+    legend_content = tk.Frame(legend_canvas, background=colors["sidebar"])
+    legend_window = legend_canvas.create_window(
+        (0, 0), window=legend_content, anchor="nw"
+    )
+    legend_content.bind(
+        "<Configure>",
+        lambda _event: legend_canvas.configure(scrollregion=legend_canvas.bbox("all")),
+    )
+    legend_canvas.bind(
+        "<Configure>",
+        lambda event: legend_canvas.itemconfigure(legend_window, width=event.width),
+    )
+
+    tk.Label(
+        sidebar,
+        text="Click any command to load it  //  <WORDS> means replace this part",
+        background=colors["sidebar"],
+        foreground=colors["faint"],
+        font=("Consolas", 8),
+        anchor="w",
+        justify="left",
+        wraplength=330,
+    ).grid(row=6, column=0, sticky="ew", padx=22, pady=(0, 16))
+
+    # Main command console.
+    main = tk.Frame(shell, background=colors["window"])
+    main.grid(row=0, column=1, sticky="nsew", padx=28, pady=24)
+    main.grid_columnconfigure(0, weight=1)
+    main.grid_rowconfigure(2, weight=1)
+
+    topbar = tk.Frame(main, background=colors["window"])
+    topbar.grid(row=0, column=0, sticky="ew")
+    topbar.grid_columnconfigure(0, weight=1)
+    heading = tk.Frame(topbar, background=colors["window"])
+    heading.grid(row=0, column=0, sticky="w")
+    tk.Label(
+        heading,
+        text="VOICE CONTROL",
+        background=colors["window"],
+        foreground=colors["text"],
+        font=("Segoe UI Semibold", 24),
+    ).pack(anchor="w")
+    tk.Label(
+        heading,
+        text="WINDOWS ASSISTANT  /  LOCAL COMMAND CONSOLE",
+        background=colors["window"],
+        foreground=colors["cyan"],
+        font=("Consolas", 9, "bold"),
+    ).pack(anchor="w", pady=(2, 0))
+
+    status = tk.StringVar(value="READY")
+    status_pill = tk.Label(
+        topbar,
+        textvariable=status,
+        background="#102D2A",
+        foreground=colors["teal"],
+        font=("Consolas", 9, "bold"),
+        padx=13,
+        pady=7,
+        highlightbackground="#1C5149",
+        highlightthickness=1,
+    )
+    status_pill.grid(row=0, column=1, sticky="ne")
+
+    tk.Label(
+        main,
+        text="Control Excel, Windows, media, the web, and Discord by voice or keyboard.",
+        background=colors["window"],
+        foreground=colors["muted"],
+        font=("Segoe UI", 10),
+        anchor="w",
+    ).grid(row=1, column=0, sticky="ew", pady=(14, 12))
+
+    transcript_card = tk.Frame(
+        main,
+        background=colors["panel"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    transcript_card.grid(row=2, column=0, sticky="nsew")
+    transcript_card.grid_rowconfigure(1, weight=1)
+    transcript_card.grid_columnconfigure(0, weight=1)
+    transcript_header = tk.Frame(transcript_card, background=colors["panel"])
+    transcript_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 8))
+    tk.Label(
+        transcript_header,
+        text="SESSION FEED",
+        background=colors["panel"],
+        foreground=colors["text"],
+        font=("Consolas", 10, "bold"),
+    ).pack(side="left")
+    tk.Label(
+        transcript_header,
+        text="LIVE",
+        background="#102D2A",
+        foreground=colors["teal"],
+        font=("Consolas", 8, "bold"),
+        padx=7,
+        pady=2,
+    ).pack(side="right")
+    transcript = tk.Text(
+        transcript_card,
+        wrap="word",
+        state="disabled",
+        background=colors["panel"],
+        foreground=colors["text"],
+        insertbackground=colors["cyan"],
+        selectbackground=colors["cyan"],
+        selectforeground=colors["window"],
+        relief="flat",
+        borderwidth=0,
+        font=("Segoe UI", 10),
+        padx=18,
+        pady=8,
+        spacing1=4,
+        spacing3=8,
+    )
+    transcript.grid(row=1, column=0, sticky="nsew")
+    transcript_scroll = make_dark_scrollbar(
+        transcript_card,
+        transcript,
+        colors["panel"],
+    )
+    transcript_scroll.grid(row=1, column=1, sticky="ns", pady=(0, 8))
+    transcript.tag_configure("You", foreground=colors["cyan"], font=("Consolas", 9, "bold"))
+    transcript.tag_configure("Voice", foreground=colors["purple"], font=("Consolas", 9, "bold"))
+    transcript.tag_configure("Interpretation", foreground=colors["amber"], font=("Consolas", 9, "bold"))
+    transcript.tag_configure("Assistant", foreground=colors["teal"], font=("Consolas", 9, "bold"))
+
+    control_card = tk.Frame(
+        main,
+        background=colors["panel"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    control_card.grid(row=3, column=0, sticky="ew", pady=(14, 0))
+    control_card.grid_columnconfigure(1, weight=1)
+    tk.Label(
+        control_card,
+        text="MIC",
+        background=colors["panel"],
+        foreground=colors["faint"],
+        font=("Consolas", 9, "bold"),
+    ).grid(row=0, column=0, sticky="w", padx=(16, 10), pady=(14, 7))
     try:
         devices = transcriber.available_input_devices()
     except (ImportError, RuntimeError, ValueError) as error:
         devices = ()
-        status.set(f"Speech unavailable: {error}")
+        status.set("SPEECH UNAVAILABLE")
     default_microphone_label = "System default"
     microphone = tk.StringVar(value=default_microphone_label)
     microphone_picker = ttk.Combobox(
-        microphone_row,
+        control_card,
         textvariable=microphone,
         values=(default_microphone_label, *devices),
         state="readonly",
-        width=55,
+        style="Console.TCombobox",
     )
-    microphone_picker.pack(side="left", fill="x", expand=True, padx=(8, 0))
+    microphone_picker.grid(
+        row=0, column=1, columnspan=2, sticky="ew", padx=(0, 16), pady=(10, 5)
+    )
 
-    command_row = ttk.Frame(frame)
-    command_row.pack(fill="x", pady=(10, 0))
-    command_entry = ttk.Entry(command_row)
-    command_entry.pack(side="left", fill="x", expand=True)
+    command_entry = tk.Entry(
+        control_card,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["cyan"],
+        selectbackground=colors["cyan"],
+        selectforeground=colors["window"],
+        disabledbackground="#101827",
+        disabledforeground=colors["faint"],
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 11),
+    )
+    command_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(16, 8), pady=(7, 14), ipady=11)
 
     speech_results: SimpleQueue[TranscriptionResult | Exception] = SimpleQueue()
 
+    def set_status(message: str, tone: str = "ready") -> None:
+        palettes = {
+            "ready": ("#102D2A", colors["teal"], "#1C5149"),
+            "working": ("#10263B", colors["cyan"], "#1E4E70"),
+            "warning": ("#33260D", colors["amber"], "#695018"),
+            "error": ("#35151E", colors["danger"], "#672635"),
+        }
+        background, foreground, border = palettes[tone]
+        status.set(message.upper())
+        status_pill.configure(
+            background=background,
+            foreground=foreground,
+            highlightbackground=border,
+        )
+
     def append_line(prefix: str, message: str) -> None:
         transcript.configure(state="normal")
-        transcript.insert("end", f"{prefix}: {message}\n")
+        transcript.insert("end", f"{prefix.upper()}  ", prefix)
+        transcript.insert("end", f"{message}\n")
         transcript.see("end")
         transcript.configure(state="disabled")
 
     def execute_command(command: str, source: str) -> None:
         append_line(source, command)
-        status.set("Working...")
+        set_status("Working", "working")
         root.update_idletasks()
         try:
             response = app.handle_text(command)
         except Exception as error:
             response = str(error)
-            status.set("Could not complete command")
+            set_status("Command failed", "error")
         else:
-            status.set("Ready")
+            if response.startswith("[CONFIRMATION REQUIRED]"):
+                set_status("Confirmation required", "warning")
+            else:
+                set_status("Ready")
         append_line("Assistant", response)
 
     def submit(_event: object | None = None) -> None:
         command = command_entry.get().strip()
         if not command:
-            status.set("Enter a command first")
+            set_status("Enter a command", "warning")
             return
         command_entry.delete(0, "end")
         execute_command(command, "You")
@@ -110,12 +525,12 @@ def run_windows_shell(
             )
         except (ImportError, RuntimeError, ValueError) as error:
             append_line("Assistant", f"Speech input unavailable: {error}")
-            status.set("Speech unavailable")
+            set_status("Speech unavailable", "error")
             return
 
-        voice_button.configure(state="disabled")
+        voice_button.configure(state="disabled", background=colors["faint"])
         command_entry.configure(state="disabled")
-        status.set("Listening... speak one command")
+        set_status("Listening - speak one command", "working")
 
         def worker() -> None:
             try:
@@ -132,14 +547,14 @@ def run_windows_shell(
             root.after(100, poll_speech_result)
             return
 
-        voice_button.configure(state="normal")
+        voice_button.configure(state="normal", background=colors["cyan"])
         command_entry.configure(state="normal")
         command_entry.focus_set()
         if isinstance(result, Exception):
             append_line("Assistant", record_speech_failure(app, result))
-            status.set("Speech unavailable")
+            set_status("Speech unavailable", "error")
         else:
-            status.set("Processing speech...")
+            set_status("Processing speech", "working")
             root.update_idletasks()
             dispatch = dispatch_transcription(app, result)
             if dispatch.executed:
@@ -147,29 +562,202 @@ def run_windows_shell(
                 if dispatch.interpreted_text != dispatch.transcript:
                     append_line("Interpretation", dispatch.interpreted_text)
             append_line("Assistant", dispatch.message)
-            status.set("Ready")
+            set_status("Ready")
         root.after(100, poll_speech_result)
 
     def poll_shutdown_request() -> None:
         if shutdown_requested is not None and shutdown_requested():
-            status.set("Stopping safely for USB removal...")
+            set_status("Stopping safely for USB removal", "warning")
             root.after(50, root.destroy)
             return
         root.after(250, poll_shutdown_request)
 
-    run_button = ttk.Button(command_row, text="Run", command=submit)
-    run_button.pack(side="left", padx=(8, 0))
-    voice_button = ttk.Button(command_row, text="Push to talk", command=capture_speech)
-    voice_button.pack(side="left", padx=(8, 0))
+    run_button = tk.Button(
+        control_card,
+        text="RUN  >",
+        command=submit,
+        background=colors["teal"],
+        activebackground="#4BE2BD",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        font=("Consolas", 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=18,
+    )
+    run_button.grid(row=1, column=2, sticky="nsew", padx=(0, 8), pady=(7, 14))
+    voice_button = tk.Button(
+        control_card,
+        text="PUSH TO TALK",
+        command=capture_speech,
+        background=colors["cyan"],
+        activebackground="#6ED0FA",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        disabledforeground=colors["window"],
+        font=("Consolas", 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=17,
+    )
+    voice_button.grid(row=1, column=3, sticky="nsew", padx=(0, 16), pady=(7, 14))
 
-    ttk.Label(
-        frame,
-        text=(
-            "Examples: open excel | go to A1 | enter 42 | report current cell | "
-            "undo last change"
-        ),
-    ).pack(anchor="w", pady=(10, 0))
+    tk.Label(
+        main,
+        text="PRIVACY-FIRST  //  RISKY ACTIONS REQUIRE CONFIRMATION  //  DISCORD SENDS REQUIRE YOUR ENTER KEY",
+        background=colors["window"],
+        foreground=colors["faint"],
+        font=("Consolas", 8),
+        anchor="w",
+    ).grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
+    def load_command(example: str) -> None:
+        command_entry.configure(state="normal")
+        command_entry.delete(0, "end")
+        command_entry.insert(0, example)
+        command_entry.focus_set()
+        command_entry.selection_range(0, "end")
+        set_status("Example loaded", "working")
+
+    def bind_legend_scroll(widget: tk.Misc) -> None:
+        widget.bind(
+            "<MouseWheel>",
+            lambda event: legend_canvas.yview_scroll(
+                -1 if event.delta > 0 else 1, "units"
+            ),
+        )
+
+    def render_legend(*_args: object) -> None:
+        for child in legend_content.winfo_children():
+            child.destroy()
+        sections = filter_command_sections(search_query.get(), active_category.get())
+        count = sum(len(section.commands) for section in sections)
+        result_summary.set(f"{count:02d} COMMANDS  //  {len(sections):02d} GROUPS")
+        if not sections:
+            empty = tk.Label(
+                legend_content,
+                text="NO MATCHING COMMANDS\nTry another word or category.",
+                background=colors["sidebar"],
+                foreground=colors["muted"],
+                font=("Consolas", 9),
+                justify="left",
+            )
+            empty.pack(anchor="w", padx=8, pady=18)
+            bind_legend_scroll(empty)
+        for section in sections:
+            section_label = tk.Label(
+                legend_content,
+                text=section.name.upper(),
+                background=colors["sidebar"],
+                foreground=section.accent,
+                font=("Consolas", 9, "bold"),
+                anchor="w",
+            )
+            section_label.pack(fill="x", padx=8, pady=(12, 7))
+            bind_legend_scroll(section_label)
+            for command in section.commands:
+                card = tk.Frame(
+                    legend_content,
+                    background=colors["card"],
+                    highlightbackground=colors["border"],
+                    highlightthickness=1,
+                    cursor="hand2",
+                )
+                card.pack(fill="x", padx=8, pady=4)
+                card.grid_columnconfigure(0, weight=1)
+                phrase = tk.Label(
+                    card,
+                    text=command.phrase,
+                    background=colors["card"],
+                    foreground=colors["text"],
+                    font=("Consolas", 9, "bold"),
+                    anchor="w",
+                    justify="left",
+                    wraplength=255,
+                    cursor="hand2",
+                )
+                phrase.grid(row=0, column=0, sticky="ew", padx=(11, 5), pady=(9, 2))
+                if command.badge:
+                    badge_color = (
+                        colors["danger"]
+                        if command.badge == "BLOCKED"
+                        else colors["amber"]
+                    )
+                    tk.Label(
+                        card,
+                        text=command.badge,
+                        background=colors["card"],
+                        foreground=badge_color,
+                        font=("Consolas", 7, "bold"),
+                    ).grid(row=0, column=1, sticky="ne", padx=(2, 9), pady=(10, 0))
+                description = tk.Label(
+                    card,
+                    text=command.description,
+                    background=colors["card"],
+                    foreground=colors["muted"],
+                    font=("Segoe UI", 8),
+                    anchor="w",
+                    justify="left",
+                    wraplength=285,
+                    cursor="hand2",
+                )
+                description.grid(
+                    row=1, column=0, columnspan=2, sticky="ew", padx=11, pady=(0, 9)
+                )
+                widgets = (card, phrase, description)
+                for widget in widgets:
+                    widget.bind(
+                        "<Button-1>",
+                        lambda _event, example=command.example: load_command(example),
+                    )
+                    bind_legend_scroll(widget)
+        legend_canvas.yview_moveto(0)
+
+    def choose_category(category: str) -> None:
+        active_category.set(category)
+        for name, button in category_buttons.items():
+            selected = name == category
+            button.configure(
+                background=colors["cyan"] if selected else colors["card"],
+                foreground=colors["window"] if selected else colors["muted"],
+            )
+        render_legend()
+
+    category_names = ("All", *(section.short_name for section in COMMAND_SECTIONS))
+    for index, name in enumerate(category_names):
+        button = tk.Button(
+            categories,
+            text=name.upper(),
+            command=lambda selected=name: choose_category(selected),
+            background=colors["card"],
+            activebackground=colors["cyan"],
+            foreground=colors["muted"],
+            activeforeground=colors["window"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=7,
+            pady=5,
+        )
+        button.grid(
+            row=index // 3,
+            column=index % 3,
+            sticky="ew",
+            padx=3,
+            pady=3,
+        )
+        categories.grid_columnconfigure(index % 3, weight=1)
+        category_buttons[name] = button
+
+    search_query.trace_add("write", render_legend)
+    choose_category("All")
+    append_line(
+        "Assistant",
+        "Console online. Choose a command from the deck, type one below, or push to talk.",
+    )
     command_entry.bind("<Return>", submit)
     command_entry.focus_set()
     root.after(100, poll_speech_result)
