@@ -23,6 +23,10 @@ windows = [
   "winrt-Windows.Media.Control>=3.2.1; platform_system=='Windows'",
 ]
 speech = ["SpeechRecognition>=3.10"]
+accuracy = [
+  "faster-whisper>=1.2.1,<2",
+  "sounddevice>=0.5.5,<1",
+]
 packaging = [
   "cryptography>=46.0.0",
   "pyinstaller>=6.21.0",

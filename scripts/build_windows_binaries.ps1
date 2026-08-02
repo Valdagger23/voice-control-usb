@@ -18,7 +18,7 @@ $launcherBuildRoot = Join-Path "build" "portable-launcher"
 $brandIconPath = Join-Path $launcherBuildRoot "voice-control.ico"
 $launcherPublicKeyPath = Join-Path $launcherBuildRoot "release-public-key.txt"
 
-& $Python -m pip install -e ".[windows,packaging]"
+& $Python -m pip install -e ".[windows,accuracy,packaging]"
 
 & $Python scripts\build_brand_icon.py --output $brandIconPath
 & $Python scripts\release_tool.py export-public-key `
@@ -41,6 +41,11 @@ $launcherPublicKeyPath = Join-Path $launcherBuildRoot "release-public-key.txt"
     --collect-all uiautomation `
     --collect-all pynput `
     --collect-all pystray `
+    --collect-all faster_whisper `
+    --collect-all ctranslate2 `
+    --collect-all sounddevice `
+    --collect-all onnxruntime `
+    --collect-all av `
     --hidden-import win32com.client `
     --hidden-import winrt.windows.media.control `
     src\voice_control_usb\__main__.py

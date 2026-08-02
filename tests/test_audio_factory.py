@@ -15,6 +15,7 @@ from voice_control_usb.audio.transcriber import (
     TranscriptionStatus,
 )
 from voice_control_usb.audio.windows_sapi import WindowsSapiSpeechTranscriber
+from voice_control_usb.audio.local_whisper import LocalWhisperSpeechTranscriber
 
 
 class SpeechFactoryTests(unittest.TestCase):
@@ -51,6 +52,20 @@ class SpeechFactoryTests(unittest.TestCase):
     def test_unknown_provider_fails_cleanly(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown speech provider selection"):
             create_speech_transcriber("mystery")
+
+    def test_local_whisper_provider_requires_both_accuracy_dependencies(self) -> None:
+        with patch("importlib.util.find_spec", return_value=None):
+            with self.assertRaisesRegex(ImportError, "Local accurate speech requires"):
+                create_speech_transcriber("local_whisper")
+
+    def test_local_whisper_provider_can_be_selected(self) -> None:
+        with patch("importlib.util.find_spec", return_value=SimpleNamespace()):
+            transcriber = create_speech_transcriber(
+                "local_whisper",
+                model_root="runtime/test-models",
+            )
+
+        self.assertIsInstance(transcriber, LocalWhisperSpeechTranscriber)
 
     def test_manual_speech_activation_is_default(self) -> None:
         activator = create_speech_activator()

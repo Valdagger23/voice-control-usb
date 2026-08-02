@@ -66,6 +66,9 @@ Phase 2 additionally provides:
 Phase 3 additionally provides:
 
 - offline Windows SAPI recognition through the installed pywin32 dependency
+- optional private local Whisper recognition with selectable English model and accent guidance
+- a persistent Speech Accuracy panel for recognizer, microphone, confidence threshold, and personal exact corrections
+- non-executing microphone tests plus conservative safe-command recovery for clear recognition mistakes
 - a non-blocking `Push to talk` button and microphone selector
 - raw transcript, visible normalized interpretation, and execution status
 - deterministic silence, ambiguity, unsupported-phrase, and provider-failure handling
@@ -195,6 +198,7 @@ Windows baseline:
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
 - `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_speech.py`
+- `.\.venv\Scripts\python.exe scripts\verify_local_whisper.py --model base.en`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_media.py --exercise-play-pause`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_browser.py`
 - `.\.venv\Scripts\python.exe -m voice_control_usb --window`

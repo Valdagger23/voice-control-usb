@@ -47,6 +47,14 @@ class RuntimeSupportTests(unittest.TestCase):
                 runtime_paths.show_window_request_path,
                 (usb_root / "runtime" / "show-window.request").resolve(),
             )
+            self.assertEqual(
+                runtime_paths.speech_profile_path,
+                (usb_root / "runtime" / "speech-profile.json").resolve(),
+            )
+            self.assertEqual(
+                runtime_paths.speech_model_root,
+                (usb_root / "models" / "faster-whisper").resolve(),
+            )
 
     def test_assistant_runtime_paths_reject_missing_usb_root(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Configured USB root does not exist"):

@@ -11,6 +11,12 @@ from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
 from voice_control_usb.assistant.windows_shell import run_windows_shell
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
+from voice_control_usb.audio.profiled import ProfiledSpeechTranscriber
+from voice_control_usb.audio.speech_profile import (
+    LOCAL_WHISPER,
+    SpeechProfileStore,
+    WINDOWS_SAPI,
+)
 from voice_control_usb.browser.factory import (
     create_browser_adapter,
     default_browser_profile_dir,
@@ -291,8 +297,21 @@ def main(argv: list[str] | None = None) -> int:
         )
         if namespace.window:
             try:
-                transcriber = create_speech_transcriber(speech_selection)
-                transcriber.select_input_device(namespace.microphone)
+                if speech_selection in {WINDOWS_SAPI, LOCAL_WHISPER}:
+                    transcriber = ProfiledSpeechTranscriber(
+                        SpeechProfileStore(runtime_paths.speech_profile_path),
+                        runtime_paths.speech_model_root,
+                        fallback_provider=speech_selection,
+                        provider_override=(
+                            None
+                            if namespace.speech_provider == "auto"
+                            else speech_selection
+                        ),
+                        microphone_override=namespace.microphone,
+                    )
+                else:
+                    transcriber = create_speech_transcriber(speech_selection)
+                    transcriber.select_input_device(namespace.microphone)
             except (ImportError, RuntimeError, ValueError) as error:
                 print(f"Assistant startup failed: {error}")
                 return 2

@@ -244,7 +244,10 @@ def _result_from_sapi(result: Any, status: TranscriptionStatus) -> Transcription
     phrase_info = result.PhraseInfo
     text = str(phrase_info.GetText()).strip()
     confidence_values = [
-        float(phrase_info.Elements.Item(index).EngineConfidence)
+        max(
+            0.0,
+            min(1.0, (float(phrase_info.Elements.Item(index).EngineConfidence) + 1.0) / 2.0),
+        )
         for index in range(int(phrase_info.Elements.Count))
     ]
     confidence = (

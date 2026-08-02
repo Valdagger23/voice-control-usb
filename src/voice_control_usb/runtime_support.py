@@ -100,6 +100,16 @@ class AssistantRuntimePaths:
     def global_controls_path(self) -> Path:
         return self.runtime_dir / "global-controls.json"
 
+    @property
+    def speech_profile_path(self) -> Path:
+        return self.runtime_dir / "speech-profile.json"
+
+    @property
+    def speech_model_root(self) -> Path:
+        if self.usb_root is not None:
+            return self.usb_root / "models" / "faster-whisper"
+        return self.runtime_dir / "models" / "faster-whisper"
+
 
 class ShutdownRequestMonitor:
     """Consume the cooperative stop request used before USB removal."""

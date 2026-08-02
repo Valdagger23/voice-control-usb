@@ -24,6 +24,8 @@ The private Ed25519 signing key stays with the release operator and must never b
       assistant\
         voice-control-usb-assistant.exe
   runtime\
+  models\
+    faster-whisper\
 ```
 
 The signed manifest binds the release ID and USB ID to the entry point and the SHA-256 hash and size of every release file. The active pointer selects one already-complete immutable release.
@@ -52,7 +54,7 @@ Use one permanent UUID for the physical USB and a new release ID for each build:
   -SigningPrivateKeyPath "C:\secure\voice-control-signing-key.pem"
 ```
 
-The script installs the Windows and packaging dependencies, generates the branded icon, builds all three executables, embeds the derived public verification key in the manual launcher, bundles the deterministic registries and native adapter dependencies, signs the assistant release, and produces:
+The script installs the Windows, local speech-accuracy, and packaging dependencies, generates the branded icon, builds all three executables, embeds the derived public verification key in the manual launcher, bundles the deterministic registries and native adapter dependencies, signs the assistant release, and produces:
 
 ```text
 dist\windows\starter\voice-control-usb-starter.exe
@@ -61,6 +63,8 @@ dist\windows\usb\...
 ```
 
 Copy the contents of `dist\windows\usb` to the USB root. Install the starter executable under `C:\Program Files\voice-control-usb` on each prepared laptop.
+
+The executable includes the local Whisper engine but not a model. After launch, open `ACCURACY`, choose `Local Whisper (accurate)`, and use `TEST MICROPHONE`. The selected model downloads into `<USB_ROOT>\models\faster-whisper` on first use. Preloading that cache before travel avoids a first-run download on another PC; keep enough free USB space for the selected model and its cache. Runtime profile and model-cache files are intentionally outside the signed immutable release and cannot bypass deterministic command parsing or safety confirmation.
 
 ## Manual launch on another Windows PC
 
@@ -118,7 +122,8 @@ The assistant consumes the cooperative stop request, closes its visible window, 
 2. Verify the release with `release_tool.py verify` and the host public key.
 3. Run the packaged starter with `--once` while the physical USB is connected.
 4. Double-click the USB-root `Voice Control.exe` and confirm the visible assistant window opens.
-5. Hide the window to the tray, double-click `Voice Control.exe` again, and confirm the existing window returns without a duplicate process.
-6. Run the packaged starter with `--once` and confirm it reports the existing instance.
-7. Run `--prepare-removal` and confirm the window, process, `assistant.lock`, and request files are gone.
-8. Change the USB drive letter and repeat; no configuration path should change.
+5. Open `ACCURACY`, confirm microphones enumerate, run the non-executing microphone test, save the profile, and verify it survives restart.
+6. Hide the window to the tray, double-click `Voice Control.exe` again, and confirm the existing window returns without a duplicate process.
+7. Run the packaged starter with `--once` and confirm it reports the existing instance.
+8. Run `--prepare-removal` and confirm the window, process, `assistant.lock`, and request files are gone.
+9. Change the USB drive letter and repeat; no configuration path should change.

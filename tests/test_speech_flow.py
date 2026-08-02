@@ -16,6 +16,7 @@ from voice_control_usb.audio.transcriber import (
     TranscriptionResult,
     TranscriptionStatus,
 )
+from voice_control_usb.audio.speech_profile import SpeechProfile
 from voice_control_usb.core.audit import AuditOutcome, InMemoryAuditStore
 from voice_control_usb.excel.adapter import StubExcelAdapter
 
@@ -135,3 +136,84 @@ class SpeechFlowTests(unittest.TestCase):
         self.assertEqual(result.message, "Moved to A1")
         self.assertIs(audit.events[0].outcome, AuditOutcome.STATUS)
         self.assertEqual(audit.events[0].details["interpreted_text"], "go to A1")
+
+    def test_low_confidence_speech_is_rejected_without_execution(self) -> None:
+        app, excel, audit, temporary = self.make_app()
+        self.addCleanup(temporary.cleanup)
+
+        result = dispatch_transcription(
+            app,
+            TranscriptionResult(
+                TranscriptionStatus.RECOGNIZED,
+                "open excel",
+                confidence=0.3,
+            ),
+            speech_profile=SpeechProfile(confidence_threshold=0.5),
+        )
+
+        self.assertFalse(result.executed)
+        self.assertFalse(excel.opened)
+        self.assertIn("only 30%", result.message)
+        self.assertEqual(audit.events[0].details["transcription_status"], "low_confidence")
+
+    def test_personal_and_safe_command_corrections_execute_visibly(self) -> None:
+        for transcript, profile, source in (
+            (
+                "open exhale",
+                SpeechProfile(corrections={"open exhale": "open excel"}),
+                "personal",
+            ),
+            ("open exel", SpeechProfile(), "command_match"),
+        ):
+            with self.subTest(transcript=transcript):
+                app, excel, audit, temporary = self.make_app()
+                self.addCleanup(temporary.cleanup)
+
+                result = dispatch_transcription(
+                    app,
+                    TranscriptionResult(TranscriptionStatus.RECOGNIZED, transcript),
+                    speech_profile=profile,
+                )
+
+                self.assertTrue(result.executed)
+                self.assertTrue(excel.opened)
+                self.assertEqual(result.interpreted_text, "open excel")
+                self.assertEqual(audit.events[0].details["interpretation_source"], source)
+
+    def test_valid_free_form_command_is_not_fuzzy_rewritten(self) -> None:
+        app, _excel, _audit, temporary = self.make_app()
+        self.addCleanup(temporary.cleanup)
+
+        result = dispatch_transcription(
+            app,
+            TranscriptionResult(
+                TranscriptionStatus.RECOGNIZED,
+                "enter open exel",
+            ),
+            speech_profile=SpeechProfile(),
+        )
+
+        self.assertEqual(result.interpreted_text, "enter open exel")
+
+    def test_spoken_correction_can_train_the_previous_mishearing(self) -> None:
+        app, _excel, _audit, temporary = self.make_app()
+        self.addCleanup(temporary.cleanup)
+        learned: list[tuple[str, str]] = []
+        dispatch_transcription(
+            app,
+            TranscriptionResult(TranscriptionStatus.RECOGNIZED, "open exhale"),
+            speech_profile=SpeechProfile(command_matching=False),
+        )
+
+        corrected = dispatch_transcription(
+            app,
+            TranscriptionResult(
+                TranscriptionStatus.RECOGNIZED,
+                "no, I said open excel",
+            ),
+            speech_profile=SpeechProfile(command_matching=False),
+            correction_recorder=lambda heard, intended: learned.append((heard, intended)),
+        )
+
+        self.assertTrue(corrected.executed)
+        self.assertEqual(learned, [("open exhale", "open excel")])

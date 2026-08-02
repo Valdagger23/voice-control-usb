@@ -19,7 +19,7 @@ The local starter configuration pins a USB UUID and an Ed25519 public key; the m
 ## Target layers
 
 1. **Assistant shell** — tray/window UI, lifecycle, visible state, and typed fallback.
-2. **Input adapters** — push-to-talk activation and pluggable speech transcription.
+2. **Input adapters** — push-to-talk activation, persistent microphone profiles, and switchable Windows SAPI or local Whisper transcription.
 3. **Interpretation** — normalize input into a typed command or a reviewable unsupported proposal.
 4. **Policy** — classify the command as allowed, confirmation-required, or blocked.
 5. **Context** — maintain application-neutral session state plus isolated capability state.
@@ -31,13 +31,15 @@ The local starter configuration pins a USB UUID and an Ed25519 public key; the m
 ## Runtime flow
 
 1. The user activates typed or push-to-talk input.
-2. Speech is transcribed into text.
-3. Interpretation produces a typed command with validated arguments.
+2. Speech is transcribed locally and rejected if its confidence is below the user's saved threshold.
+3. Exact personal corrections and conservative safe-command recovery run before normal deterministic interpretation produces a typed command with validated arguments.
 4. Policy evaluates the action and current state.
 5. Confirmation is requested when required.
 6. The capability registry routes the command to an approved adapter.
 7. The adapter returns a structured result and optional reversible-change record.
-8. The shell reports the outcome and persists an audit event.
+8. The shell reports the raw transcript, any interpretation, and the outcome, then persists an audit event.
+
+The portable speech profile stores recognizer, microphone, locale guidance, model, confidence threshold, and exact phrase corrections. It never stores captured audio. Whisper model files are downloaded on first use into the portable model cache and are not command logic: every transcript still passes through the parser, capability registry, confirmation policy, and audit boundary.
 
 ## Capability contract
 

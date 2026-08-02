@@ -29,6 +29,14 @@ from voice_control_usb.audio.transcriber import (
     SpeechTranscriber,
     TranscriptionResult,
 )
+from voice_control_usb.audio.profiled import ProfiledSpeechTranscriber
+from voice_control_usb.audio.speech_profile import (
+    LOCAL_WHISPER,
+    SUPPORTED_LOCALES,
+    SUPPORTED_MODELS,
+    SpeechProfile,
+    WINDOWS_SAPI,
+)
 
 
 def _enable_dark_title_bar(root: object) -> None:
@@ -116,6 +124,9 @@ def run_windows_shell(
         global_control_config = GlobalControlConfig()
         startup_messages.append(str(error))
     active_global_config = [global_control_config]
+    profiled_transcriber = (
+        transcriber if isinstance(transcriber, ProfiledSpeechTranscriber) else None
+    )
     global_control_summary = tk.StringVar()
     input_controller: list[GlobalInputController | None] = [None]
     tray_controller: list[TrayController | None] = [None]
@@ -741,7 +752,13 @@ def run_windows_shell(
         devices = ()
         status.set("SPEECH UNAVAILABLE")
     default_microphone_label = "System default"
-    microphone = tk.StringVar(value=default_microphone_label)
+    initial_microphone = (
+        profiled_transcriber.profile.microphone
+        if profiled_transcriber is not None
+        and profiled_transcriber.profile.microphone in devices
+        else default_microphone_label
+    )
+    microphone = tk.StringVar(value=initial_microphone)
     microphone_picker = ttk.Combobox(
         control_card,
         textvariable=microphone,
@@ -750,8 +767,26 @@ def run_windows_shell(
         style="Console.TCombobox",
     )
     microphone_picker.grid(
-        row=0, column=1, columnspan=2, sticky="ew", padx=(0, 16), pady=(10, 5)
+        row=0, column=1, sticky="ew", padx=(0, 8), pady=(10, 5)
     )
+    speech_accuracy_button = tk.Button(
+        control_card,
+        text="ACCURACY",
+        command=lambda: open_speech_accuracy_settings(),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["purple"],
+        activeforeground=colors["text"],
+        disabledforeground=colors["faint"],
+        state="normal" if profiled_transcriber is not None else "disabled",
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+        pady=8,
+    )
+    speech_accuracy_button.grid(row=0, column=2, sticky="e", padx=(0, 8), pady=(10, 5))
     global_control_button = tk.Button(
         control_card,
         textvariable=global_control_summary,
@@ -854,7 +889,7 @@ def run_windows_shell(
             transcriber.select_input_device(
                 selected_device if selected_device in devices else None
             )
-        except (ImportError, RuntimeError, ValueError) as error:
+        except (ImportError, OSError, RuntimeError, ValueError) as error:
             append_line("Assistant", f"Speech input unavailable: {error}")
             set_status("Speech unavailable", "error")
             return
@@ -952,7 +987,20 @@ def run_windows_shell(
         else:
             set_status("Processing speech", "working")
             root.update_idletasks()
-            dispatch = dispatch_transcription(app, result)
+            dispatch = dispatch_transcription(
+                app,
+                result,
+                speech_profile=(
+                    profiled_transcriber.profile
+                    if profiled_transcriber is not None
+                    else None
+                ),
+                correction_recorder=(
+                    profiled_transcriber.remember_correction
+                    if profiled_transcriber is not None
+                    else None
+                ),
+            )
             if dispatch.executed:
                 append_line("Voice", dispatch.transcript)
                 if dispatch.interpreted_text != dispatch.transcript:
@@ -1230,6 +1278,466 @@ def run_windows_shell(
             pady=9,
         ).pack(side="right")
         dialog.protocol("WM_DELETE_WINDOW", close_dialog)
+
+    def open_speech_accuracy_settings() -> None:
+        controller = profiled_transcriber
+        if controller is None:
+            append_line("Assistant", "Speech Accuracy is unavailable for this speech provider.")
+            return
+        original_profile = controller.profile
+        dialog = tk.Toplevel(root)
+        dialog.title("Voice Control // Speech Accuracy")
+        dialog_width = 720
+        dialog_height = 760
+        root.update_idletasks()
+        dialog_x = root.winfo_rootx() + max(0, (root.winfo_width() - dialog_width) // 2)
+        dialog_y = root.winfo_rooty() + max(0, (root.winfo_height() - dialog_height) // 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_x}+{dialog_y}")
+        dialog.minsize(660, 700)
+        dialog.configure(background=colors["window"])
+        dialog.transient(root)
+        dialog.grab_set()
+        _enable_dark_title_bar(dialog)
+
+        body = tk.Frame(dialog, background=colors["window"])
+        body.pack(fill="both", expand=True, padx=24, pady=20)
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(8, weight=1)
+
+        tk.Label(
+            body,
+            text="SPEECH ACCURACY",
+            background=colors["window"],
+            foreground=colors["text"],
+            font=("Segoe UI Semibold", 18),
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew")
+        tk.Label(
+            body,
+            text=(
+                "Choose the recognizer, test your microphone, and teach repeatable corrections. "
+                "Audio stays local and is not saved."
+            ),
+            background=colors["window"],
+            foreground=colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=650,
+            anchor="w",
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 16))
+
+        provider_labels = {
+            WINDOWS_SAPI: "Windows Offline (fast)",
+            LOCAL_WHISPER: "Local Whisper (accurate)",
+        }
+        providers_by_label = {label: value for value, label in provider_labels.items()}
+        provider = tk.StringVar(value=provider_labels[original_profile.provider])
+        locale = tk.StringVar(value=original_profile.locale)
+        model = tk.StringVar(value=original_profile.model)
+        selected_microphone = tk.StringVar(
+            value=original_profile.microphone or default_microphone_label
+        )
+        threshold = tk.DoubleVar(value=round(original_profile.confidence_threshold * 100))
+        command_matching = tk.BooleanVar(value=original_profile.command_matching)
+        corrections = dict(original_profile.corrections)
+        test_status = tk.StringVar(value="READY")
+        test_queue: SimpleQueue[TranscriptionResult | Exception] = SimpleQueue()
+        testing = [False]
+        applied_preview = [False]
+
+        def field_label(text: str, row: int, column: int) -> None:
+            tk.Label(
+                body,
+                text=text,
+                background=colors["window"],
+                foreground=colors["faint"],
+                font=("Consolas", 8, "bold"),
+                anchor="w",
+            ).grid(row=row, column=column, sticky="ew", padx=(0, 8), pady=(0, 4))
+
+        field_label("RECOGNIZER", 2, 0)
+        field_label("LANGUAGE / ACCENT", 2, 1)
+        provider_picker = ttk.Combobox(
+            body,
+            textvariable=provider,
+            values=tuple(provider_labels.values()),
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        provider_picker.grid(row=3, column=0, sticky="ew", padx=(0, 8))
+        locale_picker = ttk.Combobox(
+            body,
+            textvariable=locale,
+            values=SUPPORTED_LOCALES,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        locale_picker.grid(row=3, column=1, sticky="ew", padx=(8, 0))
+
+        field_label("MICROPHONE", 4, 0)
+        field_label("LOCAL MODEL", 4, 1)
+        microphone_settings_picker = ttk.Combobox(
+            body,
+            textvariable=selected_microphone,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        microphone_settings_picker.grid(row=5, column=0, sticky="ew", padx=(0, 8))
+        model_picker = ttk.Combobox(
+            body,
+            textvariable=model,
+            values=SUPPORTED_MODELS,
+            state="readonly",
+            style="Console.TCombobox",
+        )
+        model_picker.grid(row=5, column=1, sticky="ew", padx=(8, 0))
+
+        safety = tk.Frame(
+            body,
+            background=colors["panel"],
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        safety.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(16, 12))
+        safety.grid_columnconfigure(1, weight=1)
+        tk.Label(
+            safety,
+            text="MINIMUM CONFIDENCE",
+            background=colors["panel"],
+            foreground=colors["faint"],
+            font=("Consolas", 8, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=14, pady=(12, 3))
+        confidence_text = tk.StringVar()
+
+        def refresh_threshold(*_args: object) -> None:
+            confidence_text.set(f"{round(threshold.get())}%")
+
+        tk.Label(
+            safety,
+            textvariable=confidence_text,
+            background=colors["panel"],
+            foreground=colors["amber"],
+            font=("Consolas", 9, "bold"),
+        ).grid(row=0, column=2, sticky="e", padx=14, pady=(12, 3))
+        confidence_scale = tk.Scale(
+            safety,
+            variable=threshold,
+            from_=0,
+            to=90,
+            orient="horizontal",
+            showvalue=False,
+            resolution=1,
+            command=lambda _value: refresh_threshold(),
+            background=colors["panel"],
+            foreground=colors["text"],
+            troughcolor=colors["card"],
+            activebackground=colors["cyan"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        confidence_scale.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10)
+        tk.Checkbutton(
+            safety,
+            text="RECOVER CLEARLY MATCHING SAFE COMMANDS",
+            variable=command_matching,
+            background=colors["panel"],
+            activebackground=colors["panel"],
+            foreground=colors["teal"],
+            activeforeground=colors["teal"],
+            selectcolor=colors["card"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=(3, 10))
+        refresh_threshold()
+
+        corrections_card = tk.Frame(
+            body,
+            background=colors["panel"],
+            highlightbackground=colors["border"],
+            highlightthickness=1,
+        )
+        corrections_card.grid(row=8, column=0, columnspan=2, sticky="nsew")
+        corrections_card.grid_columnconfigure(0, weight=1)
+        corrections_card.grid_columnconfigure(1, weight=1)
+        corrections_card.grid_rowconfigure(2, weight=1)
+        tk.Label(
+            corrections_card,
+            text="PERSONAL CORRECTIONS  //  WHAT IT HEARD → WHAT YOU MEANT",
+            background=colors["panel"],
+            foreground=colors["purple"],
+            font=("Consolas", 9, "bold"),
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", padx=14, pady=(12, 8))
+        heard = tk.StringVar()
+        intended = tk.StringVar()
+        heard_entry = tk.Entry(
+            corrections_card,
+            textvariable=heard,
+            background=colors["card"],
+            foreground=colors["text"],
+            insertbackground=colors["cyan"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+        )
+        heard_entry.grid(row=1, column=0, sticky="ew", padx=(14, 5), pady=(0, 8), ipady=7)
+        intended_entry = tk.Entry(
+            corrections_card,
+            textvariable=intended,
+            background=colors["card"],
+            foreground=colors["text"],
+            insertbackground=colors["teal"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+        )
+        intended_entry.grid(row=1, column=1, sticky="ew", padx=(5, 14), pady=(0, 8), ipady=7)
+        correction_list = tk.Listbox(
+            corrections_card,
+            background=colors["card"],
+            foreground=colors["text"],
+            selectbackground=colors["purple"],
+            selectforeground=colors["window"],
+            relief="flat",
+            borderwidth=0,
+            font=("Consolas", 9),
+            activestyle="none",
+        )
+        correction_list.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=14)
+
+        def render_corrections() -> None:
+            correction_list.delete(0, "end")
+            for source, target in sorted(corrections.items()):
+                correction_list.insert("end", f"{source}  →  {target}")
+
+        def select_correction(_event: object | None = None) -> None:
+            selection = correction_list.curselection()
+            if not selection:
+                return
+            source = sorted(corrections)[selection[0]]
+            heard.set(source)
+            intended.set(corrections[source])
+
+        correction_list.bind("<<ListboxSelect>>", select_correction)
+        render_corrections()
+
+        correction_controls = tk.Frame(corrections_card, background=colors["panel"])
+        correction_controls.grid(row=3, column=0, columnspan=2, sticky="ew", padx=11, pady=10)
+
+        def add_correction() -> None:
+            source = " ".join(heard.get().strip().split())
+            target = " ".join(intended.get().strip().split())
+            if not source or not target:
+                test_status.set("ENTER BOTH PHRASES")
+                return
+            if app.parser.parse(target).command is None:
+                test_status.set("INTENDED PHRASE IS NOT A SUPPORTED COMMAND")
+                return
+            corrections[source.casefold()] = target
+            heard.set("")
+            intended.set("")
+            render_corrections()
+            test_status.set("CORRECTION READY TO SAVE")
+
+        def remove_correction() -> None:
+            selection = correction_list.curselection()
+            if not selection:
+                test_status.set("SELECT A CORRECTION FIRST")
+                return
+            source = sorted(corrections)[selection[0]]
+            corrections.pop(source, None)
+            heard.set("")
+            intended.set("")
+            render_corrections()
+            test_status.set("CORRECTION REMOVED")
+
+        for label, callback in (("ADD / UPDATE", add_correction), ("REMOVE", remove_correction)):
+            tk.Button(
+                correction_controls,
+                text=label,
+                command=callback,
+                background=colors["card"],
+                activebackground=colors["border"],
+                foreground=colors["cyan"],
+                activeforeground=colors["text"],
+                font=("Consolas", 8, "bold"),
+                relief="flat",
+                borderwidth=0,
+                padx=10,
+                pady=6,
+            ).pack(side="left", padx=3)
+
+        status_row = tk.Frame(body, background=colors["window"])
+        status_row.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        status_row.grid_columnconfigure(0, weight=1)
+        tk.Label(
+            status_row,
+            textvariable=test_status,
+            background=colors["window"],
+            foreground=colors["amber"],
+            font=("Consolas", 8, "bold"),
+            anchor="w",
+            wraplength=430,
+        ).grid(row=0, column=0, sticky="ew")
+
+        def profile_from_form() -> SpeechProfile:
+            return SpeechProfile.from_dict(
+                {
+                    "provider": providers_by_label[provider.get()],
+                    "microphone": (
+                        ""
+                        if selected_microphone.get() == default_microphone_label
+                        else selected_microphone.get()
+                    ),
+                    "locale": locale.get(),
+                    "model": model.get(),
+                    "confidence_threshold": threshold.get() / 100.0,
+                    "command_matching": command_matching.get(),
+                    "corrections": corrections,
+                }
+            )
+
+        def refresh_microphones(_event: object | None = None) -> None:
+            try:
+                preview = profile_from_form()
+                available = controller.available_input_devices_for(preview)
+            except (ImportError, RuntimeError, ValueError) as error:
+                microphone_settings_picker.configure(values=(default_microphone_label,))
+                selected_microphone.set(default_microphone_label)
+                test_status.set(str(error).upper())
+                return
+            microphone_settings_picker.configure(values=(default_microphone_label, *available))
+            if selected_microphone.get() not in available:
+                selected_microphone.set(default_microphone_label)
+            model_picker.configure(
+                state="readonly" if preview.provider == LOCAL_WHISPER else "disabled"
+            )
+            test_status.set("MICROPHONES REFRESHED")
+
+        provider_picker.bind("<<ComboboxSelected>>", refresh_microphones)
+
+        def poll_test_result() -> None:
+            try:
+                result = test_queue.get_nowait()
+            except Empty:
+                if testing[0] and dialog.winfo_exists():
+                    dialog.after(100, poll_test_result)
+                return
+            testing[0] = False
+            if isinstance(result, Exception):
+                test_status.set(f"TEST FAILED: {result}".upper())
+                return
+            heard.set(result.text)
+            confidence = (
+                "unknown"
+                if result.confidence is None
+                else f"{round(result.confidence * 100)}%"
+            )
+            test_status.set(
+                f"HEARD: {result.text or '[silence]'}  //  CONFIDENCE: {confidence}".upper()
+            )
+
+        def test_microphone() -> None:
+            if testing[0]:
+                return
+            try:
+                preview = profile_from_form()
+                controller.configure(preview, persist=False)
+            except (ImportError, RuntimeError, ValueError) as error:
+                test_status.set(str(error).upper())
+                return
+            applied_preview[0] = True
+            testing[0] = True
+            test_status.set(
+                "LISTENING — SAY A COMMAND. FIRST LOCAL WHISPER TEST MAY DOWNLOAD THE MODEL."
+            )
+            controller.prepare_capture()
+
+            def worker() -> None:
+                try:
+                    test_queue.put(controller.transcribe_result("record 8"))
+                except Exception as error:
+                    test_queue.put(error)
+
+            Thread(target=worker, daemon=True, name="voice-control-speech-test").start()
+            dialog.after(100, poll_test_result)
+
+        def close_accuracy(*, restore: bool) -> None:
+            controller.stop_capture()
+            if restore and applied_preview[0]:
+                try:
+                    controller.configure(original_profile, persist=False)
+                except (ImportError, RuntimeError, ValueError):
+                    pass
+            if dialog.winfo_exists():
+                dialog.grab_release()
+                dialog.destroy()
+
+        def save_accuracy() -> None:
+            nonlocal devices
+            try:
+                updated = profile_from_form()
+                controller.configure(updated, persist=True)
+                available = controller.available_input_devices()
+            except (ImportError, OSError, RuntimeError, ValueError) as error:
+                test_status.set(str(error).upper())
+                return
+            devices = available
+            microphone_picker.configure(values=(default_microphone_label, *available))
+            microphone.set(updated.microphone or default_microphone_label)
+            append_line(
+                "Assistant",
+                f"Speech Accuracy saved: {provider_labels[updated.provider]}, "
+                f"{updated.locale}, {len(updated.corrections)} personal corrections.",
+            )
+            close_accuracy(restore=False)
+
+        tk.Button(
+            status_row,
+            text="TEST MICROPHONE",
+            command=test_microphone,
+            background=colors["purple"],
+            activebackground="#B9A5FB",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=1, padx=(8, 0))
+        tk.Button(
+            status_row,
+            text="CANCEL",
+            command=lambda: close_accuracy(restore=True),
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=2, padx=(8, 0))
+        tk.Button(
+            status_row,
+            text="SAVE & APPLY",
+            command=save_accuracy,
+            background=colors["teal"],
+            activebackground="#4BE2BD",
+            foreground=colors["window"],
+            activeforeground=colors["window"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=3, padx=(8, 0))
+        refresh_microphones()
+        test_status.set("READY — TEST A COMMAND OR ADD A KNOWN MISHEARING")
+        dialog.protocol("WM_DELETE_WINDOW", lambda: close_accuracy(restore=True))
 
     tk.Label(
         main,
