@@ -74,6 +74,8 @@ class CommandParser:
                 transformed[argument] = self._excel_value(value)
             elif transform == "excel_cell":
                 transformed[argument] = self._excel_cell(value)
+            elif transform == "percentage":
+                transformed[argument] = self._percentage(value)
             else:
                 raise ValueError(f"Unknown command argument transform: {transform}")
         return transformed
@@ -102,6 +104,13 @@ class CommandParser:
         if column > 16_384 or int(row_text) > 1_048_576:
             raise ValueError(f"Excel cell is outside worksheet bounds: {normalized}")
         return normalized
+
+    @staticmethod
+    def _percentage(value: str) -> int:
+        percent = int(value)
+        if not 0 <= percent <= 100:
+            raise ValueError("Percentage must be between 0 and 100.")
+        return percent
 
     def _unsupported(self, text: str, reason: str) -> ParseResult:
         return ParseResult(

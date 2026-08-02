@@ -22,6 +22,7 @@ from voice_control_usb.desktop.adapter import DesktopAdapter, StubDesktopAdapter
 from voice_control_usb.desktop.registry import AppAliasRegistry
 from voice_control_usb.excel.adapter import ExcelAdapter, StubExcelAdapter
 from voice_control_usb.executor.engine import ExecutionEngine
+from voice_control_usb.media.adapter import MediaAdapter, StubMediaAdapter
 
 class AssistantApp:
     """Glue parser, executor, and proposal logging together."""
@@ -33,6 +34,7 @@ class AssistantApp:
         proposal_path: Path,
         excel: ExcelAdapter | None = None,
         desktop: DesktopAdapter | None = None,
+        media: MediaAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
         pending_action_timeout_seconds: float | None = None,
         clock: Callable[[], float] | None = None,
@@ -44,6 +46,7 @@ class AssistantApp:
         self.executor = ExecutionEngine(
             excel=excel or StubExcelAdapter(),
             desktop=desktop or StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+            media=media or StubMediaAdapter(),
             workflow_registry=self.workflow_registry,
         )
         self.safety = SafetyPolicy(self.workflow_registry, self.executor.registry)

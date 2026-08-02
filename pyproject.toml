@@ -10,7 +10,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 [project.optional-dependencies]
-windows = ["pywin32>=306; platform_system=='Windows'"]
+windows = [
+  "pywin32>=306; platform_system=='Windows'",
+  "pycaw>=20251023; platform_system=='Windows'",
+  "winrt-Windows.Foundation>=3.2.1; platform_system=='Windows'",
+  "winrt-Windows.Foundation.Collections>=3.2.1; platform_system=='Windows'",
+  "winrt-Windows.Media.Control>=3.2.1; platform_system=='Windows'",
+]
 speech = ["SpeechRecognition>=3.10"]
 
 [tool.setuptools]

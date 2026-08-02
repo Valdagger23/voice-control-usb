@@ -9,9 +9,26 @@ import unittest
 
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.excel.adapter import StubExcelAdapter
+from voice_control_usb.media.adapter import StubMediaAdapter
 
 
 class AssistantAppTests(unittest.TestCase):
+    def test_app_handles_media_commands_without_changing_proposal_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"
+            media = StubMediaAdapter(title="A Song", artist="An Artist")
+            app = AssistantApp(proposal_path=proposal_path, media=media)
+
+            play_result = app.handle_text("play music")
+            volume_result = app.handle_text("set volume to 25 percent")
+            now_playing_result = app.handle_text("now playing")
+
+            self.assertEqual(play_result, "Media playback started.")
+            self.assertEqual(volume_result, "Speaker volume set to 25 percent.")
+            self.assertIn("Now playing: A Song by An Artist", now_playing_result)
+            self.assertEqual(media.playback_status, "playing")
+            self.assertFalse(proposal_path.exists())
+
     def test_unsupported_command_is_logged_as_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             proposal_path = Path(tmp_dir) / "unsupported_commands.jsonl"

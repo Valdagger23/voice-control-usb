@@ -7,6 +7,69 @@
       "pattern": "^open excel$"
     },
     {
+      "name": "play_media",
+      "action": "play_media",
+      "description": "Start or resume the current media session.",
+      "pattern": "^(?:play|resume)(?: media| music)?$"
+    },
+    {
+      "name": "pause_media",
+      "action": "pause_media",
+      "description": "Pause the current media session.",
+      "pattern": "^pause(?: media| music)?$"
+    },
+    {
+      "name": "next_track",
+      "action": "next_track",
+      "description": "Skip to the next media item.",
+      "pattern": "^(?:next|skip)(?: track| song)?$"
+    },
+    {
+      "name": "previous_track",
+      "action": "previous_track",
+      "description": "Return to the previous media item.",
+      "pattern": "^previous(?: track| song)?$"
+    },
+    {
+      "name": "mute_media",
+      "action": "set_media_muted",
+      "description": "Mute the default Windows playback endpoint.",
+      "pattern": "^mute(?: audio| speakers?)?$",
+      "fixed_arguments": {
+        "muted": true
+      }
+    },
+    {
+      "name": "unmute_media",
+      "action": "set_media_muted",
+      "description": "Unmute the default Windows playback endpoint.",
+      "pattern": "^unmute(?: audio| speakers?)?$",
+      "fixed_arguments": {
+        "muted": false
+      }
+    },
+    {
+      "name": "set_media_volume",
+      "action": "set_media_volume",
+      "description": "Set default Windows playback volume from 0 to 100 percent.",
+      "pattern": "^set volume(?: to)? (?P<percent>[0-9]{1,3})(?: percent)?$",
+      "argument_transforms": {
+        "percent": "percentage"
+      }
+    },
+    {
+      "name": "report_media_volume",
+      "action": "report_media_volume",
+      "description": "Report default Windows playback volume and mute state.",
+      "pattern": "^(?:report )?(?:media |speaker )?volume$"
+    },
+    {
+      "name": "report_now_playing",
+      "action": "report_now_playing",
+      "description": "Report the current Windows media session.",
+      "pattern": "^(?:report )?now playing$"
+    },
+    {
       "name": "workflow_mark_pass_and_next_row",
       "action": "run_workflow",
       "description": "Run the approved workflow that marks pass and moves to the next row.",

@@ -58,6 +58,16 @@
 - Limit URLs to approved `http` and `https` forms.
 - Keep destructive OS-control actions gated or blocked even when the parser recognizes them.
 
+## Media and Spotify safety
+
+- Use explicit play, pause, mute, unmute, and volume state commands; do not expose arbitrary media-key injection.
+- Treat the current Windows media session as the only native playback target and report clearly when no session exists.
+- Keep ordinary local media control independent of Spotify account authorization.
+- Use Spotify Authorization Code with PKCE without a client secret in the desktop assistant.
+- Request only `user-read-playback-state` and `user-modify-playback-state`.
+- Keep the Spotify access token in memory and store only the refresh token in Windows Credential Manager.
+- Never copy Spotify tokens to the repository, USB runtime, audit log, or console output.
+
 ## Communication and privacy safety
 
 - Draft outgoing messages visibly and require explicit confirmation before sending.

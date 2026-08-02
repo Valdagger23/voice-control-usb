@@ -18,6 +18,8 @@ from voice_control_usb.desktop.adapter import DesktopAdapter
 from voice_control_usb.desktop.capability import DesktopCapability
 from voice_control_usb.excel.adapter import ExcelAdapter
 from voice_control_usb.excel.capability import ExcelCapability
+from voice_control_usb.media.adapter import MediaAdapter, StubMediaAdapter
+from voice_control_usb.media.capability import MediaCapability
 
 
 class ExecutionEngine:
@@ -27,11 +29,13 @@ class ExecutionEngine:
         self,
         excel: ExcelAdapter,
         desktop: DesktopAdapter,
+        media: MediaAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         # Compatibility views retained while callers migrate to capabilities.
         self.excel = excel
         self.desktop = desktop
+        self.media = media or StubMediaAdapter()
         self.handlers = {}
 
         self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
@@ -40,6 +44,7 @@ class ExecutionEngine:
 
         self._register_capability(ExcelCapability(excel))
         self._register_capability(DesktopCapability(desktop))
+        self._register_capability(MediaCapability(self.media))
         self.workflow_registry.validate_contracts(self.registry)
         self._register_capability(
             WorkflowCapability(

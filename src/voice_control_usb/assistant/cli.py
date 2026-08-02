@@ -14,14 +14,19 @@ from voice_control_usb.audio.factory import create_speech_activator, create_spee
 from voice_control_usb.core.audit import JsonlAuditStore
 from voice_control_usb.desktop.factory import create_desktop_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
+from voice_control_usb.media.factory import create_media_adapter
 from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
 )
+from voice_control_usb.spotify.connect import connect_spotify_account
+from voice_control_usb.spotify.credentials import WindowsCredentialStore
+from voice_control_usb.spotify.oauth import SpotifyOAuthClient, SpotifyOAuthConfig
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_console_output()
     raw_args = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(
         prog="python -m voice_control_usb",
@@ -38,6 +43,12 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("VOICE_CONTROL_USB_DESKTOP_ADAPTER", "stub"),
         choices=("stub", "windows"),
         help="Select the desktop adapter implementation.",
+    )
+    parser.add_argument(
+        "--media-adapter",
+        default=os.environ.get("VOICE_CONTROL_USB_MEDIA_ADAPTER", "stub"),
+        choices=("stub", "windows"),
+        help="Select the media adapter implementation.",
     )
     parser.add_argument(
         "--session",
@@ -81,6 +92,22 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("VOICE_CONTROL_USB_RUNTIME_DIR"),
         help=argparse.SUPPRESS,
     )
+    spotify_group = parser.add_mutually_exclusive_group()
+    spotify_group.add_argument(
+        "--spotify-connect",
+        action="store_true",
+        help="Connect an optional Spotify account using a browser sign-in.",
+    )
+    spotify_group.add_argument(
+        "--spotify-status",
+        action="store_true",
+        help="Report whether optional Spotify account access is configured.",
+    )
+    spotify_group.add_argument(
+        "--spotify-disconnect",
+        action="store_true",
+        help="Remove the Spotify refresh token from Windows Credential Manager.",
+    )
     parser.add_argument(
         "command",
         nargs="*",
@@ -96,14 +123,31 @@ def main(argv: list[str] | None = None) -> int:
     namespace = parser.parse_args(raw_args)
     if namespace.session and namespace.window:
         parser.error("choose either --session or --window")
-    if not namespace.session and not namespace.window and not namespace.command:
+    spotify_mode = any(
+        (
+            namespace.spotify_connect,
+            namespace.spotify_status,
+            namespace.spotify_disconnect,
+        )
+    )
+    if not namespace.session and not namespace.window and not namespace.command and not spotify_mode:
         parser.error("one-shot mode requires a command, or use --session or --window")
     if namespace.window and namespace.command:
         parser.error("window mode does not accept a one-shot command")
     if namespace.input_mode == "speech" and not namespace.session:
         parser.error("speech input mode requires --session")
+    if spotify_mode and (namespace.session or namespace.window or namespace.command):
+        parser.error("Spotify account setup must run as a separate command")
+
+    if spotify_mode:
+        try:
+            return _handle_spotify_mode(namespace)
+        except (ImportError, RuntimeError, ValueError) as error:
+            print(f"Spotify setup failed: {error}")
+            return 2
 
     excel_selection = namespace.excel_adapter
+    media_selection = namespace.media_adapter
     speech_selection = namespace.speech_provider
     if (
         namespace.window
@@ -115,6 +159,16 @@ def main(argv: list[str] | None = None) -> int:
         and sys.platform == "win32"
     ):
         excel_selection = "com"
+    if (
+        namespace.window
+        and not any(
+            argument == "--media-adapter" or argument.startswith("--media-adapter=")
+            for argument in raw_args
+        )
+        and "VOICE_CONTROL_USB_MEDIA_ADAPTER" not in os.environ
+        and sys.platform == "win32"
+    ):
+        media_selection = "windows"
     if speech_selection == "auto":
         speech_selection = "windows_sapi" if sys.platform == "win32" else "stub"
 
@@ -137,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         excel = create_excel_adapter(excel_selection)
         desktop = create_desktop_adapter(namespace.desktop_adapter)
+        media = create_media_adapter(media_selection)
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
         print(f"Assistant startup failed: {error}")
@@ -147,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             proposal_path=runtime_paths.proposal_path,
             excel=excel,
             desktop=desktop,
+            media=media,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
         if namespace.window:
@@ -181,3 +237,39 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         with suppress(Exception):
             instance_guard.release()
+
+
+def _handle_spotify_mode(namespace: argparse.Namespace) -> int:
+    if sys.platform != "win32":
+        raise RuntimeError("Spotify credential storage is only available on Windows.")
+    store = WindowsCredentialStore()
+    if namespace.spotify_status:
+        configured = bool(os.environ.get("VOICE_CONTROL_USB_SPOTIFY_CLIENT_ID", "").strip())
+        connected = store.get_refresh_token() is not None
+        print(
+            "Spotify account access: "
+            f"{'configured' if configured else 'client ID not configured'}, "
+            f"{'connected' if connected else 'not connected'}."
+        )
+        return 0
+    if namespace.spotify_disconnect:
+        removed = store.delete_refresh_token()
+        print(
+            "Spotify account disconnected; Windows credential removed."
+            if removed
+            else "Spotify account was not connected."
+        )
+        return 0
+
+    config = SpotifyOAuthConfig.from_environment()
+    client = SpotifyOAuthClient(config, store)
+    print(connect_spotify_account(client))
+    return 0
+
+
+def _configure_console_output() -> None:
+    """Keep valid media metadata from failing on legacy Windows code pages."""
+
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(errors="backslashreplace")

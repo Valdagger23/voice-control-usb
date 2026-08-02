@@ -64,10 +64,14 @@ Exit: the Excel vertical slice can be completed using push-to-talk on native Win
 
 Goal: add the first non-Excel capability without weakening the core boundaries.
 
+Status: complete on the `agent/phase-4-media-spotify` branch.
+
 - Add Windows media-session play, pause, previous, next, mute, volume, and now-playing actions.
 - Add optional Spotify OAuth for account-specific playback features.
 - Keep credentials in the Windows credential store.
 - Add capability-specific tests and native playback verification.
+
+Exit: native Windows play/pause and state reporting work through the shared command pipeline, speaker state is explicit, and optional Spotify authorization stores its refresh token only in Windows Credential Manager.
 
 ## Phase 5 — Browser and Google
 

@@ -6,6 +6,35 @@ from voice_control_usb.core.parser import CommandParser
 
 
 class CommandParserTests(unittest.TestCase):
+    def test_parse_media_commands(self) -> None:
+        parser = CommandParser()
+        cases = [
+            ("play music", "play_media", {}),
+            ("pause", "pause_media", {}),
+            ("next track", "next_track", {}),
+            ("previous song", "previous_track", {}),
+            ("mute speakers", "set_media_muted", {"muted": True}),
+            ("unmute audio", "set_media_muted", {"muted": False}),
+            ("set volume to 42 percent", "set_media_volume", {"percent": 42}),
+            ("report volume", "report_media_volume", {}),
+            ("now playing", "report_now_playing", {}),
+        ]
+
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
+    def test_out_of_range_volume_becomes_unsupported_proposal(self) -> None:
+        result = CommandParser().parse("set volume 101")
+
+        self.assertIsNone(result.command)
+        assert result.proposal is not None
+        self.assertIn("between 0 and 100", result.proposal.reason)
+
     def setUp(self) -> None:
         self.parser = CommandParser()
 

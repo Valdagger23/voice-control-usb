@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 3 controlled push-to-talk speech is complete on top of the native Excel vertical slice.
+Phase 4 media and Spotify control is complete on top of the native Excel and push-to-talk slices.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
-- Media/Spotify, browser/Google, and Discord capabilities follow after Excel is proven on Windows.
+- Windows media and speaker control now use native Windows APIs; browser/Google and Discord follow next.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is Windows media and Spotify control.
+- The next implementation phase is visible browser and Google control.
 
 Planning documents:
 
@@ -23,6 +23,7 @@ Planning documents:
 - [Phase 1 baseline](docs/PHASE_1_BASELINE.md)
 - [Phase 2 baseline](docs/PHASE_2_BASELINE.md)
 - [Phase 3 baseline](docs/PHASE_3_BASELINE.md)
+- [Phase 4 baseline](docs/PHASE_4_BASELINE.md)
 
 ## Existing prototype
 
@@ -62,6 +63,14 @@ Phase 3 additionally provides:
 - audit events for speech input that is rejected before command parsing
 - typed input retained alongside speech for testing and accessibility
 
+Phase 4 additionally provides:
+
+- native play, pause, previous, next, and now-playing control through the current Windows media session
+- explicit speaker mute, unmute, volume setting, and volume reporting through the default Windows playback endpoint
+- deterministic media commands available through typed input and the existing push-to-talk path
+- optional Spotify Authorization Code with PKCE setup using only playback scopes
+- Spotify refresh-token storage in Windows Credential Manager; no token is written to the repository or USB runtime
+
 ## Development environment
 - Active repository: `D:\VoiceControl`
 - Windows Python 3.12 or newer in a project-local `.venv`
@@ -97,6 +106,14 @@ py -3 -m venv .venv
 - Env override: `VOICE_CONTROL_USB_DESKTOP_ADAPTER=stub|windows`
 - Details: [docs/DESKTOP_ACTIONS.md](docs/DESKTOP_ACTIONS.md)
 
+## Media adapter selection
+
+- Default: stub adapter for cross-platform development and tests
+- Native Windows adapter: `--media-adapter windows`
+- Visible Windows mode selects the native media adapter by default
+- Environment override: `VOICE_CONTROL_USB_MEDIA_ADAPTER=stub|windows`
+- Details and commands: [docs/MEDIA_SPOTIFY.md](docs/MEDIA_SPOTIFY.md)
+
 ## Runtime modes
 - Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native Excel COM and offline Windows speech by default
 - One-shot mode: runs one command and exits
@@ -117,9 +134,12 @@ Windows baseline:
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
 - `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
 - `.\.venv\Scripts\python.exe scripts\verify_windows_speech.py`
+- `.\.venv\Scripts\python.exe scripts\verify_windows_media.py --exercise-play-pause`
 - `.\.venv\Scripts\python.exe -m voice_control_usb --window`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel"`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel and go to A1"`
+- `.\.venv\Scripts\python.exe -m voice_control_usb --media-adapter windows "now playing"`
+- `.\.venv\Scripts\python.exe -m voice_control_usb --media-adapter windows "report volume"`
 
 WSL baseline, when the USB filesystem is mounted:
 

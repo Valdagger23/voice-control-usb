@@ -56,7 +56,7 @@ Uses COM/object-level control. Keyboard and mouse automation are not the default
 
 ### Media and Spotify
 
-Begins with Windows media-session controls. Account-specific Spotify actions use OAuth and explicit scopes later.
+Uses the Windows Global System Media Transport Controls current-session API for player-neutral playback and now-playing state. Default speaker volume and mute state use the Windows Core Audio endpoint boundary. Optional account-specific Spotify access uses Authorization Code with PKCE, two playback-only scopes, short-lived access tokens in memory, and a refresh token in Windows Credential Manager.
 
 ### Browser and Google
 
@@ -77,6 +77,7 @@ Begins with visible, user-initiated navigation and state-aware microphone/camera
 
 - `core.capabilities` defines action specifications, bindings, typed argument validation, structured results, and the central registry.
 - `excel.capability` and `desktop.capability` own their action contracts and adapter bindings.
+- `media.capability` owns player and speaker action contracts; `media.windows_adapter` keeps WinRT and Core Audio details outside the core.
 - `core.builtin_capabilities` owns assistant controls and deterministic workflow expansion.
 - `executor.engine` composes capabilities and preserves the existing string-returning compatibility boundary.
 - `core.session_context` stores pending confirmation and namespaced future capability state without importing Excel.

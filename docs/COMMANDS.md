@@ -11,7 +11,23 @@
 - Push-to-talk speech mode must use explicit activation and the same post-transcription command path.
 - Safety decisions must stay deterministic: allowed immediately, requires confirmation, or blocked in MVP.
 
-## Supported Phase 2 commands
+## Supported commands
+
+### Media and speaker commands
+
+- `play media` or `play music`
+- `pause media` or `pause music`
+- `next track`
+- `previous track`
+- `mute speakers`
+- `unmute speakers`
+- `set volume to <0-100> percent`
+- `report volume`
+- `now playing`
+
+Playback commands target the current Windows media session, which can be Spotify or a supported browser/player. Mute and volume commands target the default Windows playback device. These commands are allowed immediately and return visible, audited results.
+
+### Excel and desktop commands
 
 ### `open excel`
 Opens or attaches to an Excel session.
