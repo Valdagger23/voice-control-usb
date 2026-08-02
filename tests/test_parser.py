@@ -6,6 +6,82 @@ from voice_control_usb.core.parser import CommandParser
 
 
 class CommandParserTests(unittest.TestCase):
+    def test_parse_discord_commands(self) -> None:
+        cases = [
+            ("open discord", "open_discord", {}),
+            ("go to discord team", "discord_navigate", {"alias": "team"}),
+            ("draft discord message hello", "discord_set_draft", {"text": "hello"}),
+            ("cancel discord draft", "discord_cancel_draft", {}),
+            ("send discord draft", "discord_prepare_send", {}),
+            ("mute microphone", "discord_mute_microphone", {}),
+            ("unmute microphone", "discord_unmute_microphone", {}),
+            ("deafen discord", "discord_deafen", {}),
+            ("undeafen discord", "discord_undeafen", {}),
+            ("disable camera", "discord_disable_camera", {}),
+            ("enable camera", "discord_enable_camera", {}),
+            ("discord status", "discord_report_status", {}),
+        ]
+        parser = CommandParser()
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
+    def test_parse_browser_and_google_commands(self) -> None:
+        parser = CommandParser()
+        cases = [
+            ("browse to https://example.com", "browser_open_url", {"url": "https://example.com"}),
+            ("google weather in cork", "google_search", {"query": "weather in cork"}),
+            ("new browser tab", "browser_new_tab", {}),
+            ("close browser tab", "browser_close_tab", {}),
+            ("switch to browser tab 2", "browser_switch_tab", {"index": 2}),
+            ("go back", "browser_back", {}),
+            ("go forward", "browser_forward", {}),
+            ("refresh page", "browser_refresh", {}),
+            ("scroll page down", "browser_scroll", {"direction": "down"}),
+            ("report current page", "browser_report_page", {}),
+            ("list browser tabs", "browser_list_tabs", {}),
+            ("list visible links", "browser_list_links", {}),
+            ("open link 3", "browser_open_link", {"index": 3}),
+        ]
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
+    def test_parse_media_commands(self) -> None:
+        parser = CommandParser()
+        cases = [
+            ("play music", "play_media", {}),
+            ("pause", "pause_media", {}),
+            ("next track", "next_track", {}),
+            ("previous song", "previous_track", {}),
+            ("mute speakers", "set_media_muted", {"muted": True}),
+            ("unmute audio", "set_media_muted", {"muted": False}),
+            ("set volume to 42 percent", "set_media_volume", {"percent": 42}),
+            ("report volume", "report_media_volume", {}),
+            ("now playing", "report_now_playing", {}),
+        ]
+
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
+    def test_out_of_range_volume_becomes_unsupported_proposal(self) -> None:
+        result = CommandParser().parse("set volume 101")
+
+        self.assertIsNone(result.command)
+        assert result.proposal is not None
+        self.assertIn("between 0 and 100", result.proposal.reason)
+
     def setUp(self) -> None:
         self.parser = CommandParser()
 
@@ -129,10 +205,45 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(result.command.action, "type_text")
         self.assertEqual(result.command.arguments, {"value": "fail"})
 
+    def test_parse_excel_values_preserves_text_and_converts_numbers(self) -> None:
+        cases = (
+            ("enter inspection complete", "inspection complete"),
+            ("enter 42", 42),
+            ("enter -3.5", -3.5),
+            ("type n/a", "N/A"),
+            ("type not applicable", "N/A"),
+        )
+
+        for raw_text, expected_value in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, "type_text")
+                self.assertEqual(result.command.arguments, {"value": expected_value})
+
+    def test_parse_excel_reporting_and_undo_commands(self) -> None:
+        cases = (
+            ("report current cell", "report_current_cell"),
+            ("undo last change", "undo_last_excel_change"),
+            ("undo last excel change", "undo_last_excel_change"),
+        )
+
+        for raw_text, expected_action in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, expected_action)
+
     def test_parse_navigation_commands_from_registry(self) -> None:
         for raw_text, expected_name in (
+            ("go left", "go_left"),
             ("go right", "go_right"),
             ("go down", "go_down"),
+            ("go up", "go_up"),
             ("next row from start", "next_row_from_start"),
         ):
             with self.subTest(raw_text=raw_text):
@@ -191,6 +302,16 @@ class CommandParserTests(unittest.TestCase):
         self.assertIsNotNone(result.proposal)
         assert result.proposal is not None
         self.assertIn("deterministic command registry", result.proposal.reason)
+
+    def test_parse_out_of_bounds_excel_cells_become_proposals(self) -> None:
+        for raw_text in ("go to XFE1", "go to A1048577"):
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNone(result.command)
+                self.assertIsNotNone(result.proposal)
+                assert result.proposal is not None
+                self.assertIn("outside worksheet bounds", result.proposal.reason)
 
 
 if __name__ == "__main__":

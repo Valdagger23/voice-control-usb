@@ -1,158 +1,126 @@
 # Speech Input
 
-## Overview
-Speech input is a controlled runtime boundary that feeds recognized text into the same assistant command pipeline used by typed sessions.
+## Phase 3 outcome
 
-Current design goals:
-- deterministic command handling stays unchanged
-- no wake word
-- no always-listening background mode
-- no LLM interpretation layer
-- explicit user activation before each speech transcription
+Speech input is a controlled boundary in front of the same deterministic command pipeline used by typed input. On native Windows, the visible assistant now provides a microphone selector and a `Push to talk` button. Each button press opens one limited capture cycle; there is no wake word, background listening, or continuous recording.
 
-## Runtime modes
+## Default Windows provider
 
-### One-shot mode
-Runs one typed command and exits.
+The default native provider is `windows_sapi`. It uses the installed Microsoft Speech API recognizer through pywin32:
 
-Example:
-- `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
+- recognition runs locally through the installed Windows speech engine
+- the system-default microphone is used unless the user chooses another listed input
+- capture ends after a recognition event or the eight-second safety timeout
+- captured audio is not saved by the assistant
+- the provider returns a structured `recognized`, `silence`, or `ambiguous` result
 
-### Typed session mode
-Keeps one assistant process alive and accepts one typed command per line.
-Workbook, worksheet, cell, and anchor state persist across lines in that session.
+Microsoft documents that SAPI recognition contexts deliver successful and false-recognition events separately, and that audio inputs can be enumerated through the recognizer. The implementation uses those event types as the deterministic execute/reject boundary:
 
-Example:
-- `PYTHONPATH=src .venv/bin/python -m voice_control_usb --session`
+- [SAPI recognition event](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms722027%28v%3Dvs.85%29)
+- [SAPI false-recognition event](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms722020%28v%3Dvs.85%29)
+- [SAPI audio input enumeration](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/ms722065%28v%3Dvs.85%29)
 
-### Speech session mode
-Keeps one assistant process alive and accepts one manual speech activation per line.
-Each activation is transcribed first, then the recognized text is passed into `AssistantApp.handle_text`.
+## Visible Windows workflow
 
-Example:
-- `PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech`
+Run from `D:\VoiceControl`:
 
-### Push-to-talk speech mode
-Keeps one assistant process alive and uses a controlled trigger before each transcription.
-The first terminal trigger is `Enter` in `--speech-activation ptt` mode.
+```powershell
+.\.venv\Scripts\python.exe -m voice_control_usb --window
+```
 
-Example:
-- `PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech --speech-activation ptt`
+Then:
 
-## Controlled activation model
-The current speech slice uses explicit manual activation.
-In speech session mode, each line should be one activation request:
+1. Select `System default` or one of the listed microphones.
+2. Press `Push to talk`.
+3. Speak one supported command.
+4. Wait for the transcript, optional interpretation, and assistant response.
 
-- `record open workbook /tmp/context.xlsx`
-- `record select sheet Sheet2`
-- `record go to A123`
-- `record type pass`
+The UI remains responsive during capture. The button and typed command field are temporarily disabled so two commands cannot race each other. Typed input remains available after every capture.
 
-`record` without any speech payload produces `No speech recognized.`
+## Speech decision flow
 
-This keeps speech input opt-in and deterministic while the real audio capture layer is still stubbed.
+Only a `recognized` result is allowed to reach the parser.
 
-Push-to-talk mode keeps activation explicit too:
-- press `Enter` to start one recording cycle
-- recognition stops automatically when the provider reaches silence or phrase limits
-- the recognized text is dispatched through the normal assistant command path
+- `silence`: displays `No speech recognized.` and executes nothing.
+- `ambiguous`: displays the best match for review and executes nothing.
+- provider or microphone failure: displays a clear error and executes nothing.
+- recognized but unsupported phrase: uses the normal unsupported-command proposal flow.
+- recognized supported phrase: uses the normal parser, safety policy, capability registry, executor, and audit flow.
 
-With the stub provider in WSL/tests:
-- pressing `Enter` starts a simulated recording cycle
-- the next line is treated as the recognized transcript
+Silence, ambiguity, and provider failures are also written to the audit store even though they never become commands.
 
-## Provider boundary
-Speech providers plug in through `SpeechTranscriber`.
+## Visible speech normalization
 
-Current provider:
-- `stub`
-  Manual text provider for WSL and tests. It treats `record ...` input as recognized speech.
-- `speech_recognition`
-  First real provider. It uses the Python `SpeechRecognition` package with explicit microphone capture and `recognize_google`.
+SAPI dictation may return common spoken forms such as `Go to a one` for cell `A1`, or the homophone `And you're 42` for `enter 42`. Phase 3 applies only a small explicit normalization table for these command forms.
 
-Future real providers should:
-- implement `SpeechTranscriber.transcribe`
-- be created through `create_speech_transcriber`
-- preserve the same contract of returning recognized text into the existing assistant pipeline
+When normalization changes the text, the window shows both:
 
-Speech activation controls plug in through `SpeechActivator`.
+- `Voice`: the raw recognized transcript
+- `Interpretation`: the deterministic command passed to the parser
 
-Current activators:
-- `manual`
-  Existing `record ...` line-based activation.
-- `ptt`
-  Push-to-talk activation for terminal sessions. Today it uses `Enter` as the trigger.
+The change is also audited. Unknown phrases are not broadly rewritten or guessed.
 
-Future Windows hotkey-based triggers should plug in through `SpeechActivator` without changing the parser or executor.
+Currently normalized forms include:
 
-## Real provider mode
-Select the first real provider explicitly:
+- cell columns A-E, including Alpha, Bravo, Charlie, Delta, and Echo
+- cell rows one through ten or a numeric row token
+- `and you're <VALUE>` / `and your <VALUE>` to `enter <VALUE>`
+- `save a workbook` to `save workbook`
 
-- `PYTHONPATH=src python -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition`
-- `PYTHONPATH=src python -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition --speech-activation ptt`
+## Terminal push-to-talk
 
-Activation remains controlled:
-- `record`
-- `record 7`
+The terminal session keeps the existing Enter-to-record activation:
 
-`record` captures one utterance using the default phrase time limit.
-`record 7` captures one utterance with a `7` second phrase time limit.
+```powershell
+.\.venv\Scripts\python.exe -m voice_control_usb --session --input-mode speech --speech-activation ptt
+```
 
-## Dependencies and setup
-Install the first real provider with:
+On Windows, `auto` chooses `windows_sapi`. Press Enter to start one capture cycle and type `quit` to leave the session.
 
-- `pip install SpeechRecognition`
+Select a microphone explicitly with its exact displayed name:
 
-Or:
+```powershell
+.\.venv\Scripts\python.exe -m voice_control_usb --session --input-mode speech --speech-activation ptt --microphone "Headset Microphone (Razer Audio Controller - Chat)"
+```
 
-- `pip install .[speech]`
+The equivalent environment setting is `VOICE_CONTROL_USB_MICROPHONE`.
 
-Microphone capture may also require a supported backend such as `PyAudio`, depending on the operating system and audio stack.
+## Other providers
 
-If dependencies or microphone support are unavailable:
-- provider selection fails cleanly when `SpeechRecognition` is missing
-- runtime capture failures are reported in-session without crashing the assistant
+- `stub`: manual text provider used by deterministic tests and non-Windows development.
+- `windows_sapi`: native offline Windows provider and Windows `auto` default.
+- `speech_recognition`: optional legacy provider using the SpeechRecognition package and its Google recognition path.
 
-## Limitations of the first real provider
-- requires explicit `record` activation each time
-- push-to-talk currently stops by phrase timeout or silence rather than a second keypress
-- uses a network-backed recognizer path through `recognize_google`
-- depends on local microphone/backend support
-- does not provide streaming transcripts
-- does not provide wake word or continuous listening
+Explicit provider examples:
 
-## What is still stubbed
-- microphone capture
-- device selection
-- push-to-talk hotkeys
-- streaming partial transcripts
+```powershell
+.\.venv\Scripts\python.exe -m voice_control_usb --window --speech-provider windows_sapi
+.\.venv\Scripts\python.exe -m voice_control_usb --window --speech-provider stub
+.\.venv\Scripts\python.exe -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition
+```
 
-With the `speech_recognition` provider selected, only the microphone capture and recognition call are real. The activation model and the rest of the command pipeline remain deterministic and unchanged.
+There is still no wake word, always-listening mode, streaming transcript, or AI command guessing.
 
 ## Verification
-WSL example:
 
-```bash
-printf 'record open workbook /tmp/context.xlsx\nrecord select sheet Sheet2\nrecord report current sheet\nrecord go to A123\nrecord type pass\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech
-printf '\nopen workbook /tmp/context.xlsx\n\nselect sheet Sheet2\n\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech --speech-activation ptt
+Automated suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Expected behavior:
-- each `record ...` line is echoed as `Recognized: ...`
-- the recognized text is executed through the same assistant session flow
-- workbook and sheet context persist across recognized commands
-- push-to-talk mode does the same, but uses Enter as the activation trigger and the next line as simulated speech for the stub provider
+Native offline verification:
 
-Real provider example on a machine with microphone support:
-
-```bash
-PYTHONPATH=src python -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition
-PYTHONPATH=src python -m voice_control_usb --session --input-mode speech --speech-provider speech_recognition --speech-activation ptt
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_windows_speech.py
 ```
 
-Then enter:
-- `record`
-- `record 7`
-- `quit`
+The native check:
 
-For push-to-talk mode, press `Enter` to start each recording cycle and `quit` to leave the session.
+- enumerates SAPI microphone inputs
+- opens the default microphone for a one-second capture probe without saving audio
+- synthesizes temporary local WAV phrases through Windows SAPI
+- recognizes those phrases through the offline provider
+- routes them through speech normalization, the normal assistant pipeline, and an isolated real Excel workbook
+- verifies `open excel`, `go to A1`, `enter 42`, `report current cell`, and `save workbook`
+- removes the temporary audio and runtime files afterward

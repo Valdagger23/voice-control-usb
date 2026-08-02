@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.assistant.speech_flow import (
+    dispatch_transcription,
+    record_speech_failure,
+)
 from voice_control_usb.audio.activation import SpeechActivator
 from voice_control_usb.audio.transcriber import SpeechTranscriber
 
@@ -84,19 +88,19 @@ def run_speech_session(
             break
 
         try:
-            recognized = transcriber.transcribe(activation.payload)
+            transcription = transcriber.transcribe_result(activation.payload)
         except (ImportError, RuntimeError) as error:
-            output_stream.write(f"Speech input unavailable: {error}\n")
+            output_stream.write(f"{record_speech_failure(app, error)}\n")
             output_stream.flush()
             continue
-        if not recognized:
-            output_stream.write("No speech recognized.\n")
-            output_stream.flush()
-            continue
-
-        output_stream.write(f"Recognized: {recognized}\n")
+        dispatch = dispatch_transcription(app, transcription)
+        if dispatch.executed:
+            output_stream.write(f"Recognized: {dispatch.transcript}\n")
+            if dispatch.interpreted_text != dispatch.transcript:
+                output_stream.write(f"Interpreted: {dispatch.interpreted_text}\n")
+            processed += 1
+        output_stream.write(f"{dispatch.message}\n")
         output_stream.flush()
-        processed += _handle_command(app, recognized, output_stream)
 
     return SessionResult(processed_commands=processed)
 

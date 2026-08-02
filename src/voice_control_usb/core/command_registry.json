@@ -7,6 +7,164 @@
       "pattern": "^open excel$"
     },
     {
+      "name": "play_media",
+      "action": "play_media",
+      "description": "Start or resume the current media session.",
+      "pattern": "^(?:play|resume)(?: media| music)?$"
+    },
+    {
+      "name": "browser_open_url",
+      "action": "browser_open_url",
+      "description": "Open a complete URL in the assistant-controlled browser.",
+      "pattern": "^(?:browse|navigate) to (?P<url>https?://\\S+)$"
+    },
+    {"name":"open_discord","action":"open_discord","description":"Open or focus Discord.","pattern":"^open discord$"},
+    {"name":"discord_navigate","action":"discord_navigate","description":"Navigate to an allowlisted Discord target.","pattern":"^go to discord (?P<alias>[A-Za-z0-9_-]+)$","argument_transforms":{"alias":"lower"}},
+    {"name":"discord_draft","action":"discord_set_draft","description":"Place one visible unsent Discord draft.","pattern":"^(?:draft|edit) discord message (?P<text>.+)$","argument_transforms":{"text":"strip"}},
+    {"name":"discord_cancel_draft","action":"discord_cancel_draft","description":"Clear the visible Discord draft.","pattern":"^cancel discord draft$"},
+    {"name":"discord_prepare_send","action":"discord_prepare_send","description":"After confirmation, focus the reviewed draft for a physical send action.","pattern":"^(?:prepare|send) discord draft$"},
+    {"name":"discord_mute_microphone","action":"discord_mute_microphone","description":"Mute the Discord microphone.","pattern":"^mute (?:discord )?microphone$"},
+    {"name":"discord_unmute_microphone","action":"discord_unmute_microphone","description":"Unmute the Discord microphone after confirmation.","pattern":"^unmute (?:discord )?microphone$"},
+    {"name":"discord_deafen","action":"discord_deafen","description":"Deafen Discord.","pattern":"^deafen discord$"},
+    {"name":"discord_undeafen","action":"discord_undeafen","description":"Undeafen Discord after confirmation.","pattern":"^undeafen discord$"},
+    {"name":"discord_disable_camera","action":"discord_disable_camera","description":"Disable the Discord camera.","pattern":"^(?:disable|turn off) (?:discord )?camera$"},
+    {"name":"discord_enable_camera","action":"discord_enable_camera","description":"Enable the Discord camera after confirmation.","pattern":"^(?:enable|turn on) (?:discord )?camera$"},
+    {"name":"discord_report_status","action":"discord_report_status","description":"Report Discord draft and device state.","pattern":"^(?:report )?discord status$"},
+    {"name":"discord_reject_user_token","action":"discord_blocked_action","description":"Block Discord user-token automation.","pattern":"^configure discord user token (?P<request>.+)$","argument_transforms":{"request":"strip"}},
+    {"name":"discord_reject_bulk_send","action":"discord_blocked_action","description":"Block bulk Discord messaging.","pattern":"^send discord messages (?P<request>.+)$","argument_transforms":{"request":"strip"}},
+    {
+      "name": "google_search",
+      "action": "google_search",
+      "description": "Open a visible Google search.",
+      "pattern": "^(?:google|search google for) (?P<query>.+)$",
+      "argument_transforms": {"query": "strip"}
+    },
+    {
+      "name": "browser_new_tab",
+      "action": "browser_new_tab",
+      "description": "Open a new assistant-controlled browser tab.",
+      "pattern": "^new browser tab$"
+    },
+    {
+      "name": "browser_close_tab",
+      "action": "browser_close_tab",
+      "description": "Close the current assistant-controlled browser tab.",
+      "pattern": "^close browser tab$"
+    },
+    {
+      "name": "browser_switch_tab",
+      "action": "browser_switch_tab",
+      "description": "Switch to a numbered assistant-controlled browser tab.",
+      "pattern": "^switch to browser tab (?P<index>[1-9][0-9]*)$",
+      "argument_transforms": {"index": "positive_integer"}
+    },
+    {
+      "name": "browser_back",
+      "action": "browser_back",
+      "description": "Navigate backward in the current browser tab.",
+      "pattern": "^(?:browser |go )back$"
+    },
+    {
+      "name": "browser_forward",
+      "action": "browser_forward",
+      "description": "Navigate forward in the current browser tab.",
+      "pattern": "^(?:browser |go )forward$"
+    },
+    {
+      "name": "browser_refresh",
+      "action": "browser_refresh",
+      "description": "Refresh the current browser page.",
+      "pattern": "^(?:refresh|reload)(?: page)?$"
+    },
+    {
+      "name": "browser_scroll",
+      "action": "browser_scroll",
+      "description": "Scroll the current browser page up or down.",
+      "pattern": "^scroll(?: page)? (?P<direction>up|down)$"
+    },
+    {
+      "name": "browser_report_page",
+      "action": "browser_report_page",
+      "description": "Report the current browser page identity.",
+      "pattern": "^(?:report )?(?:browser |current )?page$"
+    },
+    {
+      "name": "browser_list_tabs",
+      "action": "browser_list_tabs",
+      "description": "List assistant-controlled browser tabs.",
+      "pattern": "^list browser tabs$"
+    },
+    {
+      "name": "browser_list_links",
+      "action": "browser_list_links",
+      "description": "List safe visible navigation links on the current page.",
+      "pattern": "^list(?: visible)? links$"
+    },
+    {
+      "name": "browser_open_link",
+      "action": "browser_open_link",
+      "description": "Open a numbered link from the latest visible link list.",
+      "pattern": "^open link (?P<index>[1-9][0-9]*)$",
+      "argument_transforms": {"index": "positive_integer"}
+    },
+    {
+      "name": "pause_media",
+      "action": "pause_media",
+      "description": "Pause the current media session.",
+      "pattern": "^pause(?: media| music)?$"
+    },
+    {
+      "name": "next_track",
+      "action": "next_track",
+      "description": "Skip to the next media item.",
+      "pattern": "^(?:next|skip)(?: track| song)?$"
+    },
+    {
+      "name": "previous_track",
+      "action": "previous_track",
+      "description": "Return to the previous media item.",
+      "pattern": "^previous(?: track| song)?$"
+    },
+    {
+      "name": "mute_media",
+      "action": "set_media_muted",
+      "description": "Mute the default Windows playback endpoint.",
+      "pattern": "^mute(?: audio| speakers?)?$",
+      "fixed_arguments": {
+        "muted": true
+      }
+    },
+    {
+      "name": "unmute_media",
+      "action": "set_media_muted",
+      "description": "Unmute the default Windows playback endpoint.",
+      "pattern": "^unmute(?: audio| speakers?)?$",
+      "fixed_arguments": {
+        "muted": false
+      }
+    },
+    {
+      "name": "set_media_volume",
+      "action": "set_media_volume",
+      "description": "Set default Windows playback volume from 0 to 100 percent.",
+      "pattern": "^set volume(?: to)? (?P<percent>[0-9]{1,3})(?: percent)?$",
+      "argument_transforms": {
+        "percent": "percentage"
+      }
+    },
+    {
+      "name": "report_media_volume",
+      "action": "report_media_volume",
+      "description": "Report default Windows playback volume and mute state.",
+      "pattern": "^(?:report )?(?:media |speaker )?volume$"
+    },
+    {
+      "name": "report_now_playing",
+      "action": "report_now_playing",
+      "description": "Report the current Windows media session.",
+      "pattern": "^(?:report )?now playing$"
+    },
+    {
       "name": "workflow_mark_pass_and_next_row",
       "action": "run_workflow",
       "description": "Run the approved workflow that marks pass and moves to the next row.",
@@ -130,12 +288,18 @@
       "pattern": "^report current sheet$"
     },
     {
+      "name": "report_current_cell",
+      "action": "report_current_cell",
+      "description": "Report the active Excel cell and its current value.",
+      "pattern": "^report current cell$"
+    },
+    {
       "name": "go_to_cell",
       "action": "go_to_cell",
       "description": "Move the active Excel selection to a specific cell.",
       "pattern": "^go to (?P<cell>[A-Za-z]{1,3}[1-9][0-9]{0,6})$",
       "argument_transforms": {
-        "cell": "upper"
+        "cell": "excel_cell"
       }
     },
     {
@@ -157,6 +321,36 @@
       }
     },
     {
+      "name": "type_not_applicable",
+      "action": "type_text",
+      "description": "Type 'N/A' into the active cell.",
+      "pattern": "^type (?:n/a|not applicable)$",
+      "fixed_arguments": {
+        "value": "N/A"
+      }
+    },
+    {
+      "name": "enter_value",
+      "action": "type_text",
+      "description": "Enter a text or numeric value into the active cell.",
+      "pattern": "^enter (?P<value>.+)$",
+      "argument_transforms": {
+        "value": "excel_value"
+      }
+    },
+    {
+      "name": "undo_last_excel_change",
+      "action": "undo_last_excel_change",
+      "description": "Restore the value before the last assistant-made Excel cell edit.",
+      "pattern": "^undo last (?:excel )?change$"
+    },
+    {
+      "name": "go_left",
+      "action": "go_left",
+      "description": "Move the active selection one column to the left.",
+      "pattern": "^go left$"
+    },
+    {
       "name": "go_right",
       "action": "go_right",
       "description": "Move the active selection one column to the right.",
@@ -167,6 +361,12 @@
       "action": "go_down",
       "description": "Move the active selection one row down.",
       "pattern": "^go down$"
+    },
+    {
+      "name": "go_up",
+      "action": "go_up",
+      "description": "Move the active selection one row up.",
+      "pattern": "^go up$"
     },
     {
       "name": "next_row_from_start",

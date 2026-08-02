@@ -1,0 +1,11 @@
+{
+  "expected_volume_label": "VOICE-BOT",
+  "expected_usb_id": "00000000-0000-0000-0000-000000000000",
+  "manifest_public_key": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY",
+  "identity_file": "voice-control-usb.identity.json",
+  "active_release_file": "active-release.json",
+  "releases_dir": "releases",
+  "poll_interval_seconds": 2.0,
+  "shutdown_timeout_seconds": 15.0,
+  "log_path": "C:\\ProgramData\\voice-control-usb\\starter.log"
+}

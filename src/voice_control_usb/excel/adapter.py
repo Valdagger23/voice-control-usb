@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
 
+ExcelValue = str | int | float
+MAX_EXCEL_COLUMNS = 16_384
+MAX_EXCEL_ROWS = 1_048_576
+
+
 @dataclass(frozen=True, slots=True)
 class ExcelContext:
     """Workbook and worksheet context exposed by the adapter boundary."""
@@ -19,7 +24,7 @@ class ExcelContext:
 class SheetState:
     """Per-sheet deterministic state for the stub adapter."""
 
-    cells: dict[str, str] = field(default_factory=dict)
+    cells: dict[str, ExcelValue] = field(default_factory=dict)
     current_row: int = 1
     current_column: int = 1
     start_column: int | None = None
@@ -34,6 +39,17 @@ class WorkbookState:
     sheets: dict[str, SheetState] = field(default_factory=dict)
     active_sheet_name: str = "Sheet1"
     saved: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class CellEdit:
+    """One assistant-made cell change that can be restored once."""
+
+    workbook_key: str
+    sheet_name: str
+    cell: str
+    previous_value: ExcelValue | None
+    had_previous_value: bool = True
 
 
 class ExcelAdapter:
@@ -54,19 +70,31 @@ class ExcelAdapter:
     def report_current_sheet(self) -> str:
         raise NotImplementedError
 
+    def report_current_cell(self) -> str:
+        raise NotImplementedError
+
     def current_context(self) -> ExcelContext:
         raise NotImplementedError
 
     def go_to_cell(self, cell: str) -> str:
         raise NotImplementedError
 
-    def type_text(self, value: str) -> str:
+    def type_text(self, value: ExcelValue) -> str:
+        raise NotImplementedError
+
+    def undo_last_change(self) -> str:
+        raise NotImplementedError
+
+    def go_left(self) -> str:
         raise NotImplementedError
 
     def go_right(self) -> str:
         raise NotImplementedError
 
     def go_down(self) -> str:
+        raise NotImplementedError
+
+    def go_up(self) -> str:
         raise NotImplementedError
 
     def next_row_from_start(self) -> str:
@@ -81,6 +109,7 @@ class StubExcelAdapter(ExcelAdapter):
     workbooks: dict[str, WorkbookState] = field(default_factory=dict)
     active_workbook_key: str | None = None
     _untitled_counter: int = 1
+    _last_edit: CellEdit | None = None
 
     def open_excel(self) -> str:
         self.opened = True
@@ -125,6 +154,11 @@ class StubExcelAdapter(ExcelAdapter):
             raise ValueError("No active worksheet is available.")
         return f"Current sheet: {context.sheet_name} (workbook: {context.workbook_name})"
 
+    def report_current_cell(self) -> str:
+        sheet = self._active_sheet()
+        value = sheet.cells.get(self.current_cell)
+        return f"Current cell: {self.current_cell} (value: {self._display_value(value)})"
+
     def current_context(self) -> ExcelContext:
         workbook = self._active_workbook()
         return ExcelContext(
@@ -141,20 +175,62 @@ class StubExcelAdapter(ExcelAdapter):
         sheet.start_column = column
         return f"Moved to {self.current_cell}"
 
-    def type_text(self, value: str) -> str:
+    def type_text(self, value: ExcelValue) -> str:
         sheet = self._active_sheet()
-        sheet.cells[self.current_cell] = value
-        return f"Typed '{value}' into {self.current_cell}"
+        cell = self.current_cell
+        self._last_edit = CellEdit(
+            workbook_key=self.active_workbook_key or "",
+            sheet_name=self._active_workbook().active_sheet_name,
+            cell=cell,
+            previous_value=sheet.cells.get(cell),
+            had_previous_value=cell in sheet.cells,
+        )
+        sheet.cells[cell] = value
+        return f"Typed {self._quoted_value(value)} into {cell}"
+
+    def undo_last_change(self) -> str:
+        edit = self._last_edit
+        if edit is None:
+            return "No assistant-made Excel change to undo."
+        workbook = self.workbooks.get(edit.workbook_key)
+        if workbook is None or edit.sheet_name not in workbook.sheets:
+            raise ValueError("The workbook or worksheet for the last Excel change is no longer available.")
+        sheet = workbook.sheets[edit.sheet_name]
+        if edit.had_previous_value:
+            assert edit.previous_value is not None
+            sheet.cells[edit.cell] = edit.previous_value
+        else:
+            sheet.cells.pop(edit.cell, None)
+        self._last_edit = None
+        return f"Undid last Excel change in {edit.sheet_name}!{edit.cell}."
+
+    def go_left(self) -> str:
+        sheet = self._active_sheet()
+        if sheet.current_column <= 1:
+            raise ValueError("Cannot move left from column A.")
+        sheet.current_column -= 1
+        return f"Moved left to {self.current_cell}"
 
     def go_right(self) -> str:
         sheet = self._active_sheet()
+        if sheet.current_column >= MAX_EXCEL_COLUMNS:
+            raise ValueError("Cannot move right from column XFD.")
         sheet.current_column += 1
         return f"Moved right to {self.current_cell}"
 
     def go_down(self) -> str:
         sheet = self._active_sheet()
+        if sheet.current_row >= MAX_EXCEL_ROWS:
+            raise ValueError("Cannot move down from row 1048576.")
         sheet.current_row += 1
         return f"Moved down to {self.current_cell}"
+
+    def go_up(self) -> str:
+        sheet = self._active_sheet()
+        if sheet.current_row <= 1:
+            raise ValueError("Cannot move up from row 1.")
+        sheet.current_row -= 1
+        return f"Moved up to {self.current_cell}"
 
     def next_row_from_start(self) -> str:
         sheet = self._active_sheet()
@@ -170,10 +246,24 @@ class StubExcelAdapter(ExcelAdapter):
         return f"{self._column_letters(sheet.current_column)}{sheet.current_row}"
 
     @property
-    def cells(self) -> dict[str, str]:
+    def cells(self) -> dict[str, ExcelValue]:
         """Compatibility view used by tests for the active sheet cells."""
 
         return self._active_sheet().cells
+
+    @staticmethod
+    def _display_value(value: object) -> str:
+        if value is None or value == "":
+            return "<empty>"
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    @staticmethod
+    def _quoted_value(value: ExcelValue) -> str:
+        if isinstance(value, str):
+            return f"'{value}'"
+        return str(value)
 
     def _ensure_workbook(self) -> WorkbookState:
         if self.active_workbook_key is None:

@@ -10,8 +10,20 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 [project.optional-dependencies]
-windows = ["pywin32>=306; platform_system=='Windows'"]
+windows = [
+  "pywin32>=306; platform_system=='Windows'",
+  "pycaw>=20251023; platform_system=='Windows'",
+  "playwright>=1.62.0; platform_system=='Windows'",
+  "uiautomation>=2.0.29; platform_system=='Windows'",
+  "winrt-Windows.Foundation>=3.2.1; platform_system=='Windows'",
+  "winrt-Windows.Foundation.Collections>=3.2.1; platform_system=='Windows'",
+  "winrt-Windows.Media.Control>=3.2.1; platform_system=='Windows'",
+]
 speech = ["SpeechRecognition>=3.10"]
+packaging = [
+  "cryptography>=46.0.0",
+  "pyinstaller>=6.21.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -22,6 +34,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "voice_control_usb.core" = ["command_registry.json", "workflow_registry.json"]
 "voice_control_usb.desktop" = ["app_aliases.json"]
+"voice_control_usb.discord" = ["discord_targets.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

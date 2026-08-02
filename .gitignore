@@ -1,8 +1,13 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .venv/
 env/
 runtime/
+build/
+dist/
+work/
+*.spec
 .DS_Store
 Thumbs.db

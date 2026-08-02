@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from voice_control_usb.core.models import Command, ParseResult, UnsupportedProposal
 from voice_control_usb.core.registry import CommandRegistry
 
@@ -33,7 +35,10 @@ class CommandParser:
                 if value is not None
             }
             arguments.update(definition.fixed_arguments)
-            arguments = self._apply_transforms(arguments, definition.argument_transforms)
+            try:
+                arguments = self._apply_transforms(arguments, definition.argument_transforms)
+            except ValueError as error:
+                return self._unsupported(normalized, str(error))
 
             return ParseResult(
                 command=Command(
@@ -53,19 +58,68 @@ class CommandParser:
         self,
         arguments: dict[str, str],
         transforms: dict[str, str],
-    ) -> dict[str, str]:
-        transformed = dict(arguments)
+    ) -> dict[str, object]:
+        transformed: dict[str, object] = dict(arguments)
         for argument, transform in transforms.items():
             value = transformed.get(argument)
-            if value is None:
+            if not isinstance(value, str):
                 continue
             if transform == "lower":
                 transformed[argument] = value.lower()
-            if transform == "strip":
+            elif transform == "strip":
                 transformed[argument] = value.strip()
-            if transform == "upper":
+            elif transform == "upper":
                 transformed[argument] = value.upper()
+            elif transform == "excel_value":
+                transformed[argument] = self._excel_value(value)
+            elif transform == "excel_cell":
+                transformed[argument] = self._excel_cell(value)
+            elif transform == "percentage":
+                transformed[argument] = self._percentage(value)
+            elif transform == "positive_integer":
+                transformed[argument] = self._positive_integer(value)
+            else:
+                raise ValueError(f"Unknown command argument transform: {transform}")
         return transformed
+
+    @staticmethod
+    def _excel_value(value: str) -> str | int | float:
+        normalized = value.strip()
+        if len(normalized) > 32_767:
+            raise ValueError("Excel cell text may not exceed 32,767 characters.")
+        if re.fullmatch(r"[+-]?\d+", normalized):
+            return int(normalized)
+        if re.fullmatch(r"[+-]?(?:\d+\.\d*|\.\d+)", normalized):
+            return float(normalized)
+        return normalized
+
+    @staticmethod
+    def _excel_cell(value: str) -> str:
+        normalized = value.upper()
+        match = re.fullmatch(r"([A-Z]{1,3})([1-9][0-9]{0,6})", normalized)
+        if match is None:
+            raise ValueError(f"Invalid Excel cell reference: {value}")
+        letters, row_text = match.groups()
+        column = 0
+        for character in letters:
+            column = column * 26 + ord(character) - ord("A") + 1
+        if column > 16_384 or int(row_text) > 1_048_576:
+            raise ValueError(f"Excel cell is outside worksheet bounds: {normalized}")
+        return normalized
+
+    @staticmethod
+    def _percentage(value: str) -> int:
+        percent = int(value)
+        if not 0 <= percent <= 100:
+            raise ValueError("Percentage must be between 0 and 100.")
+        return percent
+
+    @staticmethod
+    def _positive_integer(value: str) -> int:
+        number = int(value)
+        if number < 1:
+            raise ValueError("Number must be at least 1.")
+        return number
 
     def _unsupported(self, text: str, reason: str) -> ParseResult:
         return ParseResult(

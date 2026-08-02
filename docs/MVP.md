@@ -1,40 +1,67 @@
 # MVP
 
-## Phase-1 objective
-Ship a practical deterministic skeleton that proves the architecture without overbuilding autonomy.
+## Objective
 
-## Included in phase 1
-- Trusted USB starter validation skeleton.
-- USB-hosted assistant CLI shell.
-- Strict parser for a very small approved command set.
-- Deterministic execution engine.
-- Excel adapter interface with a safe stub implementation for WSL and a Windows COM-backed implementation for object-level Excel control.
-- Workbook and worksheet context handling behind the Excel adapter boundary.
-- Unsupported-command proposal logging.
-- Parser and execution tests.
+Prove the complete VoiceControl interaction on native Windows with a deliberately small Excel capability. The architecture must allow later capability packs without implementing them in the first release.
+
+## Primary user journey
+
+1. The user launches VoiceControl on a prepared Windows laptop.
+2. VoiceControl attaches to Excel or opens a requested workbook.
+3. The user issues a typed command or holds push-to-talk and speaks.
+4. VoiceControl shows the transcript, validates the command, and executes an approved Excel action.
+5. Workbook, worksheet, cell, and row-entry context remain available for the session.
+6. VoiceControl reports and audits the outcome.
+
+## Included
+
+### Assistant shell
+
+- Small visible Windows interface or tray application.
+- Ready, listening, processing, confirmation, and error states.
+- Typed-command fallback.
+- Push-to-talk activation; no always-listening wake word.
+- Visible transcript and execution result.
+- Help, status, pause, and exit controls.
+
+### Deterministic runtime
+
+- Typed command models and validated arguments.
+- Session context separated from capability-specific state.
+- Capability registry and explicit handler routing.
+- Deterministic safety classification.
+- Structured audit events and unsupported-command proposals.
+- Stub adapters for automated tests and native adapters for Windows integration tests.
+
+### Basic Excel capability
+
+- Open or attach to Excel.
+- Open a workbook by path or configured friendly name.
+- Select and report the active workbook and worksheet.
+- Go to and report the active cell.
+- Enter validated text, numbers, `Pass`, `Fail`, or `N/A`.
+- Move left, right, up, and down.
+- Mark an approved value and move to the next anchored row.
+- Save the active workbook.
+- Record enough information to reverse the last assistant-made cell edit when possible.
+
+## MVP safety behavior
+
+- Unsupported or ambiguous input never executes.
+- Excel uses COM/object-level automation.
+- Every assistant-made mutation creates an audit event.
+- Destructive actions require confirmation or remain blocked.
+- No arbitrary shell commands, background autonomy, or self-modification.
 
 ## Explicitly deferred
-- Production speech-to-text integration.
-- Live AI-driven code rewriting.
-- Broad operating system control.
-- Keyboard automation as a default Excel strategy.
-- Background autonomy beyond the starter launch flow.
 
-## Initial command scope
-- `open excel`
-- `open workbook <PATH>`
-- `select sheet <NAME>`
-- `save workbook`
-- `report current sheet`
-- `go to <CELL>`
-- `type pass`
-- `type fail`
-- `go right`
-- `go down`
-- `next row from start`
+- Spotify and general media control.
+- Browser navigation and Google services.
+- Discord navigation, messaging, microphone, and camera control.
+- Wake-word activation.
+- Broad natural-language planning.
+- Arbitrary user-created executable workflows.
 
-## Ordered next implementation steps
-1. Expand the parser with a reviewed command grammar for workbook save-as and worksheet creation or rename actions.
-2. Add starter configuration loading and USB metadata validation beyond a single trust marker.
-3. Introduce a speech-to-text adapter that outputs plain text into the same deterministic parser path.
-4. Add structured proposal review tooling so unsupported commands can become reviewed grammar additions.
+## Exit criteria
+
+The MVP is complete when a user can perform a full Excel row-entry workflow using push-to-talk on native Windows, correct or reverse an assistant-made cell edit, save the workbook, and exit safely. Automated tests must cover parsing, policy, routing, state, and failure cases; native Windows verification must cover microphone input and real Excel COM behavior.

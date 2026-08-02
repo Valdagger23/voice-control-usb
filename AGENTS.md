@@ -1,35 +1,49 @@
 # AGENTS.md
 
 ## Project
-This repository builds a Windows-first voice-controlled automation system with strong support for Microsoft Excel workflows and a USB-portable deployment model.
+This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-We are in early architecture + MVP implementation.
-Do not jump to advanced autonomy before the deterministic core works.
+The planned Phase 0-7 baseline is complete. The signed packaged assistant launches through the local starter from a host-pinned removable USB, rejects duplicates, supports cooperative safe removal, and activates or recovers only fully verified immutable releases.
+
+Treat further capabilities as a new planned phase. Preserve the verified deployment, safety, privacy, and recovery boundaries.
 
 ## Primary goal
 Build a reliable modular system with these layers:
 1. local laptop starter/watcher
-2. USB-hosted main assistant
-3. speech-to-text input
-4. strict command parsing
-5. deterministic execution engine
-6. Excel automation module
-7. safe unsupported-command proposal flow
+2. USB-hosted Windows assistant shell
+3. typed and push-to-talk input adapters
+4. validated command and context model
+5. deterministic policy and execution engine
+6. capability registry and adapter boundary
+7. basic Excel capability first
+8. media/Spotify, browser/Google, and Discord capabilities later
+9. audit, recovery, and unsupported-command proposal flow
 
 ## Non-goals for early phases
 Do not implement full self-modifying code.
 Do not grant unrestricted OS control.
 Do not build unsafe silent autorun behavior.
 Do not use blind keyboard automation where direct Excel object control is possible.
+Do not automate Discord user accounts through personal tokens or self-bot behavior.
+Do not implement background or bulk messaging.
+Do not store account tokens as plaintext on the USB.
 
 ## Architecture rules
 - Prefer Python for the main implementation.
 - Keep desktop starter and main assistant separate.
+- Keep the assistant core independent of Excel and every other individual capability.
+- Add Windows features through explicit capability interfaces with declared actions and safety classes.
+- Keep action specifications beside their owning capability and bind them through `CapabilityRegistry`.
+- Return structured `ActionResult` values at the capability boundary; unwrap messages only at compatibility/UI boundaries.
+- Record command decisions and outcomes through the audit-store boundary.
 - Use COM/object-level Excel control before keyboard/mouse fallbacks.
 - Keep command handling deterministic and testable.
 - AI-assisted command generation must produce proposals, not live unsafe rewrites.
 - Unknown commands should be logged and converted into reviewed proposals.
+- Prefer explicit state-setting commands such as `mute microphone` over blind toggle commands.
+- Require confirmation before privacy-sensitive or outward-facing actions such as enabling a camera, unmuting a microphone, or sending a message.
+- Store OAuth tokens and other secrets in a Windows credential store, not in repository files or portable plaintext configuration.
 
 ## Repository priorities
 - Keep modules small and clear.

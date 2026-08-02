@@ -1,101 +1,69 @@
-# Deployment Packaging
+# Deployment and Packaging
 
-## Goal
-Prepare two separate Windows binaries:
+## Release model
 
-- a USB-hosted assistant executable
-- a laptop-installed starter executable
+Voice Control uses two Windows executables:
 
-The starter remains local to each prepared laptop.
-The assistant remains portable on the trusted USB.
+- a laptop-installed starter that detects and verifies the USB
+- a signed, immutable assistant release stored on the USB
 
-## Expected packaged layout
+The private Ed25519 signing key stays with the release operator and must never be copied to the USB or a prepared laptop. Each laptop stores only the public key, expected USB UUID, and expected volume label.
 
-### USB layout
-The trusted USB should contain the packaged assistant at:
+## USB layout
 
 ```text
 <USB_ROOT>\
-  voice-control-usb.trusted
-  dist\
-    voice-control-usb-assistant\
-      voice-control-usb-assistant.exe
+  voice-control-usb.identity.json
+  active-release.json
+  releases\
+    <RELEASE_ID>\
+      manifest.json
+      manifest.sig
+      assistant\
+        voice-control-usb-assistant.exe
+  runtime\
 ```
 
-This path matches the default starter config field:
+The signed manifest binds the release ID and USB ID to the entry point and the SHA-256 hash and size of every release file. The active pointer selects one already-complete immutable release.
 
-- `assistant_relative_executable = "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe"`
+## First-time signing setup
 
-### Prepared laptop layout
-Recommended local starter install layout:
-
-```text
-C:\Program Files\voice-control-usb\
-  voice-control-usb-starter.exe
-
-C:\ProgramData\voice-control-usb\
-  starter.json
-  starter.log
-```
-
-## Building the Windows binaries
-Use the packaging script from a native Windows environment:
+Generate the signing key pair outside the repository and retain a secure backup of the private key:
 
 ```powershell
-Set-Location C:\path\to\voice-control-usb
-.\scripts\build_windows_binaries.ps1
+.\.venv\Scripts\python.exe scripts\release_tool.py generate-key `
+  --private-key C:\secure\voice-control-signing-key.pem `
+  --public-key C:\secure\voice-control-public-key.txt
 ```
 
-The script:
+Copy the base64 public-key value into each laptop's local `starter.json`. Do not copy the private key to the USB.
 
-- installs `pyinstaller`
-- builds `voice-control-usb-assistant.exe`
-- builds `voice-control-usb-starter.exe`
-- bundles the deterministic runtime data files into the assistant executable:
-  - `command_registry.json`
-  - `workflow_registry.json`
-  - `app_aliases.json`
-- copies the outputs into:
-  - `dist\windows\assistant\voice-control-usb-assistant.exe`
-  - `dist\windows\starter\voice-control-usb-starter.exe`
+## Build a signed Windows release
 
-## Deploying the packaged assistant to USB
-Copy the assistant binary to the trusted USB so the final path is:
+Use one permanent UUID for the physical USB and a new release ID for each build:
+
+```powershell
+.\scripts\build_windows_binaries.ps1 `
+  -Python .\.venv\Scripts\python.exe `
+  -UsbId "<PERMANENT-USB-UUID>" `
+  -ReleaseId "0.1.0" `
+  -SigningPrivateKeyPath "C:\secure\voice-control-signing-key.pem"
+```
+
+The script installs the Windows and packaging dependencies, builds both executables, bundles the deterministic registries and native adapter dependencies, signs the assistant release, and produces:
 
 ```text
-<USB_ROOT>\dist\voice-control-usb-assistant\voice-control-usb-assistant.exe
+dist\windows\starter\voice-control-usb-starter.exe
+dist\windows\usb\...
 ```
 
-Also place the trust marker file in the USB root:
+Copy the contents of `dist\windows\usb` to the USB root. Install the starter executable under `C:\Program Files\voice-control-usb` on each prepared laptop.
 
-```text
-<USB_ROOT>\voice-control-usb.trusted
-```
+## Laptop configuration
 
-Set the USB volume label to the configured expected label, for example `VOICEBOT`.
+Create `C:\ProgramData\voice-control-usb\starter.json` from `config\starter.example.json`, replacing the label, UUID, and public key with the real values. The USB ID and public key are host-pinned; changing a drive letter does not change trust.
 
-## Installing the starter on a prepared laptop
-1. Copy `dist\windows\starter\voice-control-usb-starter.exe` to:
-   `C:\Program Files\voice-control-usb\voice-control-usb-starter.exe`
-2. Create `C:\ProgramData\voice-control-usb\starter.json`
-3. Optionally create `C:\ProgramData\voice-control-usb\starter.log`
-4. Register the starter at logon through Task Scheduler
-
-Example starter config:
-
-```json
-{
-  "expected_volume_label": "VOICEBOT",
-  "trust_marker": "voice-control-usb.trusted",
-  "assistant_relative_executable": "dist/voice-control-usb-assistant/voice-control-usb-assistant.exe",
-  "assistant_workdir": ".",
-  "poll_interval_seconds": 2.0,
-  "log_path": "C:\\ProgramData\\voice-control-usb\\starter.log"
-}
-```
-
-## Task Scheduler startup
-You can register the starter manually in Task Scheduler or use:
+Register the starter at logon:
 
 ```powershell
 .\scripts\install_starter_task.ps1 `
@@ -103,36 +71,44 @@ You can register the starter manually in Task Scheduler or use:
   -ConfigPath "C:\ProgramData\voice-control-usb\starter.json"
 ```
 
-This creates a logon task that runs the starter for the current machine.
+The scheduled task ignores duplicate task starts, runs without a three-day execution limit, and restarts after transient failure.
 
-## How the starter finds the assistant
-On each scan:
+## Verified updates
 
-1. enumerate removable drives
-2. find drives whose volume label matches `expected_volume_label`
-3. require the marker file in the USB root
-4. resolve `<USB_ROOT>/<assistant_relative_executable>`
-5. set the packaged assistant working directory from `assistant_workdir`
-6. launch that executable with `shell=False`
-7. pass `--usb-root <USB_ROOT>` and `--runtime-dir <USB_ROOT>\runtime`
+Prepare a new signed release directory with `release_tool.py create`. Then activate it through the local starter:
 
-If the packaged assistant file is missing, launch is skipped and the reason is logged.
+```powershell
+voice-control-usb-starter.exe `
+  --config C:\ProgramData\voice-control-usb\starter.json `
+  --activate-update E:\staged\0.2.0
+```
 
-## Packaged runtime assumptions
-The packaged assistant uses explicit runtime inputs instead of relying on the current shell state:
+The starter verifies the source, copies it to a unique staging directory on the USB, verifies the copied files again, renames the complete directory into `releases`, and atomically replaces `active-release.json`. The old release remains untouched. If copying or verification is interrupted, the previous pointer remains usable.
 
-- `--usb-root` identifies the trusted USB root
-- `--runtime-dir` identifies where lock files and runtime output live
-- deterministic JSON data files are bundled into the packaged assistant
+Recover a missing or broken active pointer to the highest named fully verified installed release:
 
-The assistant also uses a runtime lock file in `<USB_ROOT>\runtime\assistant.lock` to prevent duplicate packaged instances even if the starter is restarted.
+```powershell
+voice-control-usb-starter.exe --config C:\ProgramData\voice-control-usb\starter.json --recover
+```
 
-## Native Windows verification still required
-WSL tests cover launch-spec generation and packaged-path resolution.
-Native Windows verification is still required for:
+## Safe removal
 
-- real PyInstaller output
-- real removable-drive discovery
-- real Task Scheduler startup
-- real packaged assistant launch from USB
-- real packaged assistant resource extraction and lock-file behavior
+Before ejecting the USB, run:
+
+```powershell
+voice-control-usb-starter.exe `
+  --config C:\ProgramData\voice-control-usb\starter.json `
+  --prepare-removal
+```
+
+The assistant consumes the cooperative stop request, closes its visible window, releases its runtime lock, and reports when the USB is ready. If shutdown times out, do not remove the USB.
+
+## Verification checklist
+
+1. Run `python -m unittest discover -s tests -q`.
+2. Verify the release with `release_tool.py verify` and the host public key.
+3. Run the packaged starter with `--once` while the physical USB is connected.
+4. Confirm the visible assistant window opens from the detected drive root.
+5. Run a second `--once` and confirm it reports the existing instance.
+6. Run `--prepare-removal` and confirm the window, process, `assistant.lock`, and `shutdown.request` are gone.
+7. Change the USB drive letter and repeat; no configuration path should change.
