@@ -146,7 +146,7 @@ py -3 -m venv .venv
 - Details and commands: [docs/MEDIA_SPOTIFY.md](docs/MEDIA_SPOTIFY.md)
 
 ## Runtime modes
-- Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native Excel COM and offline Windows speech by default
+- Visible Windows mode: `--window` opens typed and push-to-talk input, selecting native desktop, Excel COM, media, browser, Discord, and offline Windows speech adapters by default
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline

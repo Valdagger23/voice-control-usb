@@ -102,6 +102,8 @@ class CliTests(unittest.TestCase):
                     "--window",
                     "--excel-adapter",
                     "stub",
+                    "--desktop-adapter",
+                    "stub",
                     "--speech-provider",
                     "stub",
                 ]
@@ -117,6 +119,31 @@ class CliTests(unittest.TestCase):
             run_window.call_args.args[1].__class__.__name__,
             "ManualTextSpeechTranscriber",
         )
+
+    def test_window_mode_selects_native_desktop_adapter_on_windows(self) -> None:
+        with patch("voice_control_usb.assistant.cli.sys.platform", "win32"), patch(
+            "voice_control_usb.assistant.cli.create_desktop_adapter"
+        ) as create_desktop, patch(
+            "voice_control_usb.assistant.cli.run_windows_shell"
+        ):
+            exit_code = cli.main(
+                [
+                    "--window",
+                    "--excel-adapter",
+                    "stub",
+                    "--media-adapter",
+                    "stub",
+                    "--browser-adapter",
+                    "stub",
+                    "--discord-adapter",
+                    "stub",
+                    "--speech-provider",
+                    "stub",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        create_desktop.assert_called_once_with("windows")
 
 
 if __name__ == "__main__":
