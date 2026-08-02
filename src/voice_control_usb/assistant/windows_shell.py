@@ -61,6 +61,7 @@ def run_windows_shell(
     app: AssistantApp,
     transcriber: SpeechTranscriber,
     shutdown_requested: Callable[[], bool] | None = None,
+    show_window_requested: Callable[[], bool] | None = None,
     *,
     global_controls_path: Path | None = None,
     start_minimized: bool = False,
@@ -988,6 +989,11 @@ def run_windows_shell(
             return
         root.after(250, poll_shutdown_request)
 
+    def poll_show_window_request() -> None:
+        if show_window_requested is not None and show_window_requested():
+            show_window()
+        root.after(250, poll_show_window_request)
+
     run_button = tk.Button(
         control_card,
         text="RUN  >",
@@ -1703,6 +1709,7 @@ def run_windows_shell(
     command_entry.focus_set()
     root.after(100, poll_speech_result)
     root.after(250, poll_shutdown_request)
+    root.after(250, poll_show_window_request)
     if start_minimized and tray_available[0]:
         root.withdraw()
     elif start_minimized:

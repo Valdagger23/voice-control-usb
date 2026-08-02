@@ -13,14 +13,24 @@ $ErrorActionPreference = "Stop"
 
 $assistantName = "voice-control-usb-assistant"
 $starterName = "voice-control-usb-starter"
+$launcherName = "Voice Control"
+$launcherBuildRoot = Join-Path "build" "portable-launcher"
+$brandIconPath = Join-Path $launcherBuildRoot "voice-control.ico"
+$launcherPublicKeyPath = Join-Path $launcherBuildRoot "release-public-key.txt"
 
 & $Python -m pip install -e ".[windows,packaging]"
+
+& $Python scripts\build_brand_icon.py --output $brandIconPath
+& $Python scripts\release_tool.py export-public-key `
+    --private-key $SigningPrivateKeyPath `
+    --public-key $launcherPublicKeyPath
 
 & $Python -m PyInstaller `
     --noconfirm `
     --clean `
     --onefile `
     --name $assistantName `
+    --icon $brandIconPath `
     --paths src `
     --add-data "src\voice_control_usb\core\command_registry.json;voice_control_usb\core" `
     --add-data "src\voice_control_usb\core\workflow_registry.json;voice_control_usb\core" `
@@ -43,6 +53,18 @@ $starterName = "voice-control-usb-starter"
     --paths src `
     --collect-all cryptography `
     src\voice_control_usb\starter\cli.py
+
+& $Python -m PyInstaller `
+    --noconfirm `
+    --clean `
+    --onefile `
+    --windowed `
+    --name $launcherName `
+    --icon $brandIconPath `
+    --paths src `
+    --add-data "$launcherPublicKeyPath;voice_control_usb\portable" `
+    --collect-all cryptography `
+    src\voice_control_usb\portable\cli.py
 
 $usbRoot = Join-Path $DistRoot "usb"
 $releaseRoot = Join-Path $usbRoot (Join-Path "releases" $ReleaseId)
@@ -67,7 +89,10 @@ Copy-Item "dist\$starterName.exe" (Join-Path $starterTarget "$starterName.exe") 
     --usb-id $UsbId `
     --release-id $ReleaseId
 
+Copy-Item "dist\$launcherName.exe" (Join-Path $usbRoot "$launcherName.exe") -Force
+
 Write-Host "Built Windows binaries:"
 Write-Host "  Assistant: $(Join-Path $assistantTarget "$assistantName.exe")"
 Write-Host "  Starter:   $(Join-Path $starterTarget "$starterName.exe")"
+Write-Host "  Launcher:  $(Join-Path $usbRoot "$launcherName.exe")"
 Write-Host "  USB image: $usbRoot"

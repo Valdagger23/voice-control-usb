@@ -11,6 +11,7 @@ The planned Phase 0-7 roadmap is complete. Voice Control now combines 158 visibl
 - The dark command console lists every supported phrase and includes a collapsible routine builder.
 - Users can create routines, drag commands into a left-to-right sequence, edit or reorder steps, and start the saved chain by name.
 - Prepared Windows hosts launch the trusted USB assistant into a branded notification-area icon; clicking it opens the command console.
+- Any compatible Windows PC can also open the USB and double-click the branded root-level `Voice Control.exe` launcher; no autorun or host starter is required for this manual path.
 - A persistent global keyboard key or mouse button can be assigned to hold-to-talk or toggle continuous listening.
 - Discord launch, allowlisted navigation, visible drafts, and inspected device state now use Windows accessibility without user tokens or self-bot APIs.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
@@ -127,6 +128,9 @@ py -3 -m venv .venv
 ```
 
 ## Trusted USB starter
+- The built USB image places a friendly `Voice Control.exe` at its root for manual double-click launch on unfamiliar Windows PCs
+- The launcher locates the USB from its own path, verifies the active signed assistant release with its embedded public key, and opens the full console visibly
+- Double-clicking it again reveals the existing tray window rather than starting a duplicate assistant
 - Local starter config is JSON-based and separate from the USB-hosted assistant
 - Trust requires the expected removable-volume label, host-pinned USB UUID, signed manifest, and matching hash and size for every release file
 - The starter launches a packaged assistant executable from the trusted USB with `shell=False`

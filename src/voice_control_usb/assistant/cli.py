@@ -24,6 +24,7 @@ from voice_control_usb.runtime_support import (
     AssistantInstanceGuard,
     AssistantRuntimePaths,
     DuplicateInstanceError,
+    ShowWindowRequestMonitor,
     ShutdownRequestMonitor,
 )
 from voice_control_usb.spotify.connect import connect_spotify_account
@@ -248,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
 
     instance_guard = AssistantInstanceGuard(runtime_paths.lock_path)
     shutdown_monitor = ShutdownRequestMonitor(runtime_paths.shutdown_request_path)
+    show_window_monitor = ShowWindowRequestMonitor(runtime_paths.show_window_request_path)
     try:
         instance_guard.acquire()
     except DuplicateInstanceError as error:
@@ -298,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
                 app,
                 transcriber,
                 shutdown_monitor.requested,
+                show_window_monitor.requested,
                 global_controls_path=runtime_paths.global_controls_path,
                 start_minimized=namespace.start_minimized,
             )

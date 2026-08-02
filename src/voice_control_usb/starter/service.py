@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import subprocess
+import sys
 from time import monotonic, sleep
 from typing import Callable, Protocol
 
@@ -78,11 +79,13 @@ class SubprocessLauncher:
     def launch(self, spec: LaunchSpec) -> ProcessHandle:
         env = os.environ.copy()
         env.update(spec.env_overrides)
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         return subprocess.Popen(  # noqa: S603
             spec.command,
             cwd=spec.cwd,
             env=env,
             shell=False,
+            creationflags=creationflags,
         )
 
 
