@@ -77,8 +77,8 @@ def run_windows_shell(
 
     root = tk.Tk()
     root.title("Voice Control // Command Console")
-    root.geometry("1220x760")
-    root.minsize(980, 620)
+    root.geometry("1520x820")
+    root.minsize(1180, 680)
     root.configure(background=colors["window"])
     root.option_add("*Font", ("Segoe UI", 10))
     root.option_add("*TCombobox*Listbox.background", colors["card"])
@@ -187,7 +187,7 @@ def run_windows_shell(
     shell = tk.Frame(root, background=colors["window"])
     shell.pack(fill="both", expand=True)
     shell.grid_rowconfigure(0, weight=1)
-    shell.grid_columnconfigure(1, weight=1)
+    shell.grid_columnconfigure(2, weight=1)
 
     # Command deck sidebar.
     sidebar = tk.Frame(
@@ -220,6 +220,21 @@ def run_windows_shell(
         foreground=colors["text"],
         font=("Segoe UI Semibold", 15),
     ).pack(side="left", padx=(10, 0))
+    tk.Button(
+        brand,
+        text="ROUTINES",
+        command=lambda: toggle_routine_panel(True),
+        background=colors["card"],
+        activebackground=colors["pink"],
+        foreground=colors["muted"],
+        activeforeground=colors["window"],
+        font=("Consolas", 7, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=7,
+        pady=4,
+    ).pack(side="right")
     tk.Label(
         sidebar,
         text="Every supported voice phrase, organized and ready to load.",
@@ -316,9 +331,251 @@ def run_windows_shell(
         wraplength=330,
     ).grid(row=6, column=0, sticky="ew", padx=22, pady=(0, 16))
 
+    # Swappable routine builder. Commands are arranged and run left-to-right.
+    routine_panel = tk.Frame(
+        shell,
+        width=360,
+        background=colors["panel"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+    )
+    routine_panel.grid(row=0, column=1, sticky="nsew")
+    routine_panel.grid_propagate(False)
+    routine_panel.grid_columnconfigure(0, weight=1)
+    routine_panel.grid_rowconfigure(5, weight=1)
+
+    routine_header = tk.Frame(routine_panel, background=colors["panel"])
+    routine_header.grid(row=0, column=0, sticky="ew", padx=18, pady=(21, 6))
+    routine_header.grid_columnconfigure(0, weight=1)
+    tk.Label(
+        routine_header,
+        text="ROUTINE BUILDER",
+        background=colors["panel"],
+        foreground=colors["text"],
+        font=("Segoe UI Semibold", 15),
+    ).grid(row=0, column=0, sticky="w")
+    tk.Button(
+        routine_header,
+        text="HIDE",
+        command=lambda: toggle_routine_panel(False),
+        background=colors["card"],
+        activebackground=colors["border"],
+        foreground=colors["muted"],
+        activeforeground=colors["text"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=8,
+        pady=4,
+    ).grid(row=0, column=1, sticky="e")
+    tk.Label(
+        routine_panel,
+        text="Drag commands from the deck. Steps run in numbered order from left to right.",
+        background=colors["panel"],
+        foreground=colors["muted"],
+        font=("Segoe UI", 9),
+        justify="left",
+        anchor="w",
+        wraplength=320,
+    ).grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 13))
+
+    routine_name_row = tk.Frame(routine_panel, background=colors["panel"])
+    routine_name_row.grid(row=2, column=0, sticky="ew", padx=18)
+    routine_name_row.grid_columnconfigure(0, weight=1)
+    routine_name = tk.StringVar()
+    routine_name_entry = tk.Entry(
+        routine_name_row,
+        textvariable=routine_name,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["pink"],
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 10),
+    )
+    routine_name_entry.grid(row=0, column=0, sticky="ew", ipady=8)
+    tk.Button(
+        routine_name_row,
+        text="NEW",
+        command=lambda: create_routine(),
+        background=colors["pink"],
+        activebackground="#FA94C5",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+    ).grid(row=0, column=1, sticky="ns", padx=(7, 0))
+
+    routine_select_row = tk.Frame(routine_panel, background=colors["panel"])
+    routine_select_row.grid(row=3, column=0, sticky="ew", padx=18, pady=(9, 0))
+    routine_select_row.grid_columnconfigure(0, weight=1)
+    current_routine = tk.StringVar()
+    routine_selector = ttk.Combobox(
+        routine_select_row,
+        textvariable=current_routine,
+        state="readonly",
+        style="Console.TCombobox",
+    )
+    routine_selector.grid(row=0, column=0, sticky="ew")
+    routine_selector.bind("<<ComboboxSelected>>", lambda _event: select_routine())
+    tk.Button(
+        routine_select_row,
+        text="RUN",
+        command=lambda: run_selected_routine(),
+        background=colors["teal"],
+        activebackground="#4BE2BD",
+        foreground=colors["window"],
+        activeforeground=colors["window"],
+        font=("Consolas", 8, "bold"),
+        relief="flat",
+        borderwidth=0,
+        cursor="hand2",
+        padx=10,
+    ).grid(row=0, column=1, sticky="ns", padx=(7, 0))
+
+    routine_toolbar = tk.Frame(routine_panel, background=colors["panel"])
+    routine_toolbar.grid(row=4, column=0, sticky="ew", padx=15, pady=(9, 4))
+    for label, callback in (
+        ("RENAME", lambda: rename_routine()),
+        ("DELETE", lambda: prepare_delete_routine()),
+        ("ADD LOADED", lambda: add_loaded_command()),
+    ):
+        tk.Button(
+            routine_toolbar,
+            text=label,
+            command=callback,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 8, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=7,
+            pady=5,
+        ).pack(side="left", padx=3)
+
+    routine_body = tk.Frame(routine_panel, background=colors["panel"])
+    routine_body.grid(row=5, column=0, sticky="nsew", padx=18, pady=(5, 8))
+    routine_body.grid_columnconfigure(0, weight=1)
+    routine_body.grid_rowconfigure(1, weight=1)
+    tk.Label(
+        routine_body,
+        text="SEQUENCE  //  LEFT TO RIGHT",
+        background=colors["panel"],
+        foreground=colors["pink"],
+        font=("Consolas", 9, "bold"),
+        anchor="w",
+    ).grid(row=0, column=0, sticky="ew", pady=(4, 7))
+    routine_lane = tk.Canvas(
+        routine_body,
+        background=colors["sidebar"],
+        highlightbackground=colors["border"],
+        highlightthickness=1,
+        borderwidth=0,
+        height=250,
+        cursor="hand2",
+    )
+    routine_lane.grid(row=1, column=0, sticky="nsew")
+    routine_steps = tk.Frame(routine_lane, background=colors["sidebar"])
+    routine_steps_window = routine_lane.create_window(
+        (10, 10), window=routine_steps, anchor="nw"
+    )
+    routine_steps.bind(
+        "<Configure>",
+        lambda _event: routine_lane.configure(scrollregion=routine_lane.bbox("all")),
+    )
+    routine_lane.bind(
+        "<Configure>",
+        lambda event: routine_lane.itemconfigure(
+            routine_steps_window,
+            height=max(event.height - 20, routine_steps.winfo_reqheight()),
+        ),
+    )
+    routine_lane.bind(
+        "<MouseWheel>",
+        lambda event: routine_lane.xview_scroll(-1 if event.delta > 0 else 1, "units"),
+    )
+
+    lane_nav = tk.Frame(routine_body, background=colors["panel"])
+    lane_nav.grid(row=2, column=0, sticky="ew", pady=(6, 10))
+    tk.Button(
+        lane_nav,
+        text="<",
+        command=lambda: routine_lane.xview_scroll(-3, "units"),
+        background=colors["card"], foreground=colors["muted"],
+        relief="flat", borderwidth=0, cursor="hand2", padx=12,
+    ).pack(side="left")
+    tk.Button(
+        lane_nav,
+        text=">",
+        command=lambda: routine_lane.xview_scroll(3, "units"),
+        background=colors["card"], foreground=colors["muted"],
+        relief="flat", borderwidth=0, cursor="hand2", padx=12,
+    ).pack(side="left", padx=(5, 0))
+    routine_step_count = tk.StringVar(value="00 STEPS")
+    tk.Label(
+        lane_nav,
+        textvariable=routine_step_count,
+        background=colors["panel"],
+        foreground=colors["faint"],
+        font=("Consolas", 8, "bold"),
+    ).pack(side="right")
+
+    tk.Label(
+        routine_body,
+        text="SELECTED STEP",
+        background=colors["panel"],
+        foreground=colors["faint"],
+        font=("Consolas", 8, "bold"),
+        anchor="w",
+    ).grid(row=3, column=0, sticky="ew")
+    step_editor = tk.Entry(
+        routine_body,
+        background=colors["card"],
+        foreground=colors["text"],
+        insertbackground=colors["pink"],
+        relief="flat",
+        borderwidth=0,
+        font=("Consolas", 9),
+    )
+    step_editor.grid(row=4, column=0, sticky="ew", pady=(5, 7), ipady=8)
+    step_controls = tk.Frame(routine_body, background=colors["panel"])
+    step_controls.grid(row=5, column=0, sticky="ew")
+    for label, callback in (
+        ("UPDATE", lambda: update_selected_step()),
+        ("REMOVE", lambda: remove_selected_step()),
+        ("MOVE <", lambda: move_selected_step(-1)),
+        ("MOVE >", lambda: move_selected_step(1)),
+    ):
+        tk.Button(
+            step_controls,
+            text=label,
+            command=callback,
+            background=colors["card"],
+            activebackground=colors["border"],
+            foreground=colors["muted"],
+            activeforeground=colors["text"],
+            font=("Consolas", 7, "bold"),
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=5,
+            pady=5,
+        ).pack(side="left", padx=(0, 4))
+
+    routine_panel_visible = [True]
+    selected_step = [-1]
+    drag_payload: dict[str, object] = {}
+
     # Main command console.
     main = tk.Frame(shell, background=colors["window"])
-    main.grid(row=0, column=1, sticky="nsew", padx=28, pady=24)
+    main.grid(row=0, column=2, sticky="nsew", padx=28, pady=24)
     main.grid_columnconfigure(0, weight=1)
     main.grid_rowconfigure(2, weight=1)
 
@@ -508,6 +765,7 @@ def run_windows_shell(
             else:
                 set_status("Ready")
         append_line("Assistant", response)
+        refresh_routine_selector()
 
     def submit(_event: object | None = None) -> None:
         command = command_entry.get().strip()
@@ -621,6 +879,267 @@ def run_windows_shell(
         command_entry.selection_range(0, "end")
         set_status("Example loaded", "working")
 
+    def toggle_routine_panel(visible: bool | None = None) -> None:
+        show = not routine_panel_visible[0] if visible is None else visible
+        if show:
+            routine_panel.grid()
+            root.geometry("1520x820")
+        else:
+            routine_panel.grid_remove()
+            root.geometry("1180x760")
+        routine_panel_visible[0] = show
+
+    def routine_failure(error: Exception | str) -> None:
+        message = str(error)
+        set_status("Routine needs attention", "error")
+        append_line("Assistant", message)
+
+    def refresh_routine_selector(selected_name: str | None = None) -> None:
+        routines = app.routines.list()
+        names = tuple(routine.name for routine in routines)
+        routine_selector.configure(values=names)
+        desired = selected_name or current_routine.get()
+        if desired not in names:
+            desired = names[0] if names else ""
+        current_routine.set(desired)
+        if desired:
+            routine_name.set(desired)
+        render_routine_steps()
+
+    def select_routine() -> None:
+        selected_step[0] = -1
+        routine_name.set(current_routine.get())
+        render_routine_steps()
+
+    def create_routine() -> None:
+        try:
+            routine = app.routines.create(routine_name.get())
+        except (RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        refresh_routine_selector(routine.name)
+        set_status("Routine created")
+
+    def rename_routine() -> None:
+        if not current_routine.get():
+            routine_failure("Create or select a routine first.")
+            return
+        try:
+            routine = app.routines.rename(current_routine.get(), routine_name.get())
+        except (RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        refresh_routine_selector(routine.name)
+        set_status("Routine renamed")
+
+    def prepare_delete_routine() -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine first.")
+            return
+        load_command(f"delete routine {name}")
+        set_status("Delete loaded - run to review", "warning")
+
+    def run_selected_routine() -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine first.")
+            return
+        execute_command(f"start {name} routine", "Routine")
+
+    def add_loaded_command() -> None:
+        command = command_entry.get().strip()
+        if not command:
+            routine_failure("Load or type a command first.")
+            return
+        add_command_to_routine(command)
+
+    def add_command_to_routine(command: str, index: int | None = None) -> None:
+        name = current_routine.get()
+        if not name:
+            routine_failure("Create or select a routine before adding commands.")
+            return
+        try:
+            app.routines.add_command(name, command, index=index)
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        render_routine_steps()
+        set_status("Routine step added")
+
+    def select_step_at(index: int) -> None:
+        routine = app.routines.get(current_routine.get())
+        if routine is None or not 0 <= index < len(routine.commands):
+            return
+        selected_step[0] = index
+        step_editor.delete(0, "end")
+        step_editor.insert(0, routine.commands[index])
+        render_routine_steps()
+
+    def update_selected_step() -> None:
+        if selected_step[0] < 0:
+            routine_failure("Select a routine step first.")
+            return
+        try:
+            app.routines.update_command(
+                current_routine.get(),
+                selected_step[0],
+                step_editor.get(),
+            )
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        render_routine_steps()
+        set_status("Routine step updated")
+
+    def remove_selected_step() -> None:
+        if selected_step[0] < 0:
+            routine_failure("Select a routine step first.")
+            return
+        try:
+            app.routines.remove_command(current_routine.get(), selected_step[0])
+        except (IndexError, RuntimeError, ValueError) as error:
+            routine_failure(error)
+            return
+        selected_step[0] = -1
+        step_editor.delete(0, "end")
+        render_routine_steps()
+        set_status("Routine step removed")
+
+    def move_selected_step(delta: int) -> None:
+        routine = app.routines.get(current_routine.get())
+        index = selected_step[0]
+        if routine is None or not 0 <= index < len(routine.commands):
+            routine_failure("Select a routine step first.")
+            return
+        target = max(0, min(len(routine.commands) - 1, index + delta))
+        if target == index:
+            return
+        app.routines.move_command(routine.name, index, target)
+        selected_step[0] = target
+        render_routine_steps()
+        set_status("Routine order updated")
+
+    def begin_step_drag(event: tk.Event[tk.Misc], index: int) -> None:
+        drag_payload.clear()
+        drag_payload.update(kind="step", index=index, start_x=event.x_root)
+        select_step_at(index)
+
+    def finish_step_drag(event: tk.Event[tk.Misc], index: int) -> None:
+        if drag_payload.get("kind") != "step":
+            return
+        source_index = int(drag_payload.get("index", index))
+        start_x = int(drag_payload.get("start_x", event.x_root))
+        if abs(event.x_root - start_x) < 8:
+            drag_payload.clear()
+            select_step_at(source_index)
+            return
+        cards = routine_steps.winfo_children()
+        if not cards:
+            drag_payload.clear()
+            return
+        target = min(
+            range(len(cards)),
+            key=lambda item: abs(
+                event.x_root
+                - (cards[item].winfo_rootx() + cards[item].winfo_width() // 2)
+            ),
+        )
+        drag_payload.clear()
+        app.routines.move_command(current_routine.get(), source_index, target)
+        selected_step[0] = target
+        render_routine_steps()
+        set_status("Routine order updated")
+
+    def render_routine_steps() -> None:
+        for child in routine_steps.winfo_children():
+            child.destroy()
+        routine = app.routines.get(current_routine.get())
+        commands = () if routine is None else routine.commands
+        routine_step_count.set(f"{len(commands):02d} STEPS")
+        if not commands:
+            tk.Label(
+                routine_steps,
+                text="DROP COMMANDS HERE\n\nCreate a routine, then drag command cards\nfrom the left deck into this lane.",
+                background=colors["sidebar"],
+                foreground=colors["faint"],
+                font=("Consolas", 9),
+                justify="left",
+                anchor="nw",
+            ).pack(side="left", anchor="n", padx=10, pady=12)
+            routine_lane.configure(scrollregion=routine_lane.bbox("all"))
+            return
+        for index, command in enumerate(commands):
+            selected = index == selected_step[0]
+            card = tk.Frame(
+                routine_steps,
+                width=176,
+                height=190,
+                background=colors["card_hover"] if selected else colors["card"],
+                highlightbackground=colors["pink"] if selected else colors["border"],
+                highlightthickness=2 if selected else 1,
+                cursor="fleur",
+            )
+            card.pack(side="left", anchor="n", padx=(0, 9), pady=4)
+            card.pack_propagate(False)
+            number = tk.Label(
+                card,
+                text=f"STEP {index + 1:02d}",
+                background=card.cget("background"),
+                foreground=colors["pink"],
+                font=("Consolas", 8, "bold"),
+                anchor="w",
+            )
+            number.pack(fill="x", padx=11, pady=(11, 8))
+            phrase = tk.Label(
+                card,
+                text=command,
+                background=card.cget("background"),
+                foreground=colors["text"],
+                font=("Consolas", 9, "bold"),
+                justify="left",
+                anchor="nw",
+                wraplength=150,
+                cursor="fleur",
+            )
+            phrase.pack(fill="both", expand=True, padx=11, pady=(0, 10))
+            for widget in (card, number, phrase):
+                widget.bind(
+                    "<ButtonPress-1>",
+                    lambda event, step=index: begin_step_drag(event, step),
+                )
+                widget.bind(
+                    "<ButtonRelease-1>",
+                    lambda event, step=index: finish_step_drag(event, step),
+                )
+        routine_lane.configure(scrollregion=routine_lane.bbox("all"))
+
+    def begin_command_drag(event: tk.Event[tk.Misc], example: str) -> None:
+        drag_payload.clear()
+        drag_payload.update(
+            kind="command",
+            command=example,
+            start_x=event.x_root,
+            start_y=event.y_root,
+        )
+
+    def finish_command_drag(event: tk.Event[tk.Misc], example: str) -> None:
+        start_x = int(drag_payload.get("start_x", event.x_root))
+        start_y = int(drag_payload.get("start_y", event.y_root))
+        moved = abs(event.x_root - start_x) + abs(event.y_root - start_y) >= 8
+        lane_left = routine_lane.winfo_rootx()
+        lane_top = routine_lane.winfo_rooty()
+        over_lane = (
+            routine_panel_visible[0]
+            and lane_left <= event.x_root <= lane_left + routine_lane.winfo_width()
+            and lane_top <= event.y_root <= lane_top + routine_lane.winfo_height()
+        )
+        drag_payload.clear()
+        if moved and over_lane:
+            add_command_to_routine(example)
+        elif not moved:
+            load_command(example)
+
     def bind_legend_scroll(widget: tk.Misc) -> None:
         widget.bind(
             "<MouseWheel>",
@@ -679,38 +1198,31 @@ def run_windows_shell(
                     cursor="hand2",
                 )
                 phrase.grid(row=0, column=0, sticky="ew", padx=(11, 5), pady=(9, 2))
+                card_widgets: list[tk.Misc] = [card, phrase]
                 if command.badge:
                     badge_color = (
                         colors["danger"]
                         if command.badge == "BLOCKED"
                         else colors["amber"]
                     )
-                    tk.Label(
+                    badge = tk.Label(
                         card,
                         text=command.badge,
                         background=colors["card"],
                         foreground=badge_color,
                         font=("Consolas", 7, "bold"),
-                    ).grid(row=0, column=1, sticky="ne", padx=(2, 9), pady=(10, 0))
-                description = tk.Label(
-                    card,
-                    text=command.description,
-                    background=colors["card"],
-                    foreground=colors["muted"],
-                    font=("Segoe UI", 8),
-                    anchor="w",
-                    justify="left",
-                    wraplength=285,
-                    cursor="hand2",
-                )
-                description.grid(
-                    row=1, column=0, columnspan=2, sticky="ew", padx=11, pady=(0, 9)
-                )
-                widgets = (card, phrase, description)
-                for widget in widgets:
+                    )
+                    badge.grid(row=0, column=1, sticky="ne", padx=(2, 9), pady=(10, 0))
+                    card_widgets.append(badge)
+                phrase.grid_configure(pady=(10, 10))
+                for widget in card_widgets:
                     widget.bind(
-                        "<Button-1>",
-                        lambda _event, example=command.example: load_command(example),
+                        "<ButtonPress-1>",
+                        lambda event, example=command.example: begin_command_drag(event, example),
+                    )
+                    widget.bind(
+                        "<ButtonRelease-1>",
+                        lambda event, example=command.example: finish_command_drag(event, example),
                     )
                     bind_legend_scroll(widget)
         legend_canvas.yview_moveto(0)
@@ -753,6 +1265,7 @@ def run_windows_shell(
         category_buttons[name] = button
 
     search_query.trace_add("write", render_legend)
+    refresh_routine_selector()
     choose_category("All")
     append_line(
         "Assistant",

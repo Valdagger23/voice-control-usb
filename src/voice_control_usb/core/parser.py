@@ -74,6 +74,10 @@ class CommandParser:
                 transformed[argument] = self._excel_value(value)
             elif transform == "excel_cell":
                 transformed[argument] = self._excel_cell(value)
+            elif transform == "excel_range":
+                transformed[argument] = self._excel_range(value)
+            elif transform == "excel_formula":
+                transformed[argument] = self._excel_formula(value)
             elif transform == "percentage":
                 transformed[argument] = self._percentage(value)
             elif transform == "positive_integer":
@@ -106,6 +110,23 @@ class CommandParser:
         if column > 16_384 or int(row_text) > 1_048_576:
             raise ValueError(f"Excel cell is outside worksheet bounds: {normalized}")
         return normalized
+
+    @classmethod
+    def _excel_range(cls, value: str) -> str:
+        parts = value.upper().split(":")
+        if len(parts) not in {1, 2}:
+            raise ValueError(f"Invalid Excel range: {value}")
+        normalized = [cls._excel_cell(part) for part in parts]
+        return ":".join(normalized)
+
+    @staticmethod
+    def _excel_formula(value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Excel formula must not be empty.")
+        if len(normalized) > 8_192:
+            raise ValueError("Excel formula may not exceed 8,192 characters.")
+        return normalized if normalized.startswith("=") else f"={normalized}"
 
     @staticmethod
     def _percentage(value: str) -> int:

@@ -88,6 +88,10 @@ class AssistantRuntimePaths:
     def shutdown_request_path(self) -> Path:
         return self.runtime_dir / "shutdown.request"
 
+    @property
+    def routine_path(self) -> Path:
+        return self.runtime_dir / "routines.json"
+
 
 class ShutdownRequestMonitor:
     """Consume the cooperative stop request used before USB removal."""

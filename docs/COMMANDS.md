@@ -1,262 +1,203 @@
 # Commands
 
-## Command design rules
-- Commands must parse deterministically.
-- Each command must map to one approved handler.
-- Ambiguous natural language should be rejected and logged as a proposal.
-- Excel-oriented actions should target object-level operations first.
-- Workbook and worksheet context are maintained within the active assistant process.
-- Session mode preserves that context across multiple commands in one runtime.
-- Speech session mode must feed recognized text into the same typed command handling path.
-- Push-to-talk speech mode must use explicit activation and the same post-transcription command path.
-- Safety decisions must stay deterministic: allowed immediately, requires confirmation, or blocked in MVP.
+Voice Control exposes 158 deterministic commands. The command deck in the Windows console is the live, searchable catalogue; this file mirrors its phrases. Text in angle brackets is replaced with the requested value.
 
-## Supported commands
+## Excel & workflows
 
-### Discord commands
+- `open excel`
+- `open workbook <PATH>`
+- `select sheet <NAME>`
+- `save workbook`
+- `report current sheet`
+- `report current cell`
+- `go to <CELL>`
+- `type pass`
+- `type fail`
+- `type n/a` or `type not applicable`
+- `enter <VALUE>`
+- `undo last change`
+- `go left`
+- `go right`
+- `go down`
+- `go up`
+- `next row from start`
+- `mark pass and next row`
+- `mark fail and next row`
+- `open excel and go to A1`
+- `create workbook` or `new workbook`
+- `create sheet <NAME>`
+- `rename current sheet <NAME>`
+- `delete current sheet` — confirmation required
+- `select range <RANGE>`
+- `read range <RANGE>`
+- `clear cell`
+- `clear range <RANGE>`
+- `copy cell`
+- `copy range <RANGE>`
+- `paste cells`
+- `fill down`
+- `find <VALUE>`
+- `replace <OLD> with <NEW>` — confirmation required
+- `enter formula <FORMULA>`
+- `format as currency`
+- `make selection bold`
+- `sort by column <COLUMN>` — confirmation required
+- `filter column <COLUMN> by <VALUE>`
+- `insert row above`
+- `insert row below`
+- `close workbook` — confirmation required
 
-- `open discord`
-- `go to discord <ALIAS>`
-- `draft discord message <TEXT>`
-- `edit discord message <TEXT>`
-- `cancel discord draft`
-- `send discord draft` (confirmation prepares and focuses it; you press Enter)
-- `mute microphone`
-- `unmute microphone` (confirmation required)
-- `deafen discord`
-- `undeafen discord` (confirmation required)
-- `disable camera`
-- `enable camera` (confirmation required)
-- `discord status`
+## Browser & Google
 
-Discord target aliases come from `VOICE_CONTROL_USB_DISCORD_TARGETS`. Message submission is never automated for a normal Discord account. User-token and bulk-send phrases are explicitly blocked.
-
-### Browser and Google commands
-
-- `browse to https://example.com`
-- `google <search terms>`
-- `search google for <search terms>`
+- `browse to <URL>` or `navigate to <URL>`
+- `google <WORDS>` or `search google for <WORDS>`
 - `new browser tab`
 - `close browser tab`
 - `switch to browser tab <NUMBER>`
-- `go back`
-- `go forward`
-- `refresh page`
+- `go back` or `browser back`
+- `go forward` or `browser forward`
+- `refresh` or `reload page`
 - `scroll page up`
 - `scroll page down`
 - `report current page`
 - `list browser tabs`
 - `list visible links`
 - `open link <NUMBER>`
+- `open google`
+- `open youtube`
+- `open gmail`
+- `open maps`
+- `open spotify`
+- `switch to tab named <TITLE>`
+- `close tab <NUMBER>`
+- `duplicate current tab`
+- `find on page <TEXT>`
+- `zoom in`
+- `zoom out`
+- `reset zoom`
+- `scroll to top`
+- `scroll to bottom`
+- `read page headings`
+- `read selected text`
+- `copy current page address`
+- `stop loading`
+- `reopen closed tab`
 
-`list visible links` returns at most ten visible HTTP(S) navigation links and excludes anchors marked as downloads. `open link <NUMBER>` only works against that fresh page snapshot and navigates directly to the recorded URL. It does not click buttons, submit forms, start purchases, download files, or send messages.
+Visible-link commands operate on a fresh list of HTTP(S) navigation links. They do not submit forms, purchase items, download files, or send messages.
 
-### Media and speaker commands
+## Media & Spotify
 
-- `play media` or `play music`
-- `pause media` or `pause music`
-- `next track`
-- `previous track`
-- `mute speakers`
-- `unmute speakers`
+- `play`, `play music`, or `resume media`
+- `pause` or `pause music`
+- `next track` or `skip song`
+- `previous track` or `previous song`
+- `mute` or `mute speakers`
+- `unmute` or `unmute speakers`
 - `set volume to <0-100> percent`
 - `report volume`
 - `now playing`
+- `raise volume` or `increase volume`
+- `lower volume` or `decrease volume`
+- `play song <NAME>`
+- `play artist <NAME>`
+- `play album <NAME>`
+- `play playlist <NAME>`
+- `shuffle on`
+- `shuffle off`
+- `repeat track`
+- `repeat playlist` or `repeat album`
+- `repeat off`
+- `seek forward <SECONDS> seconds`
+- `seek backward <SECONDS> seconds`
+- `restart song`
+- `like this song` — confirmation required
+- `add this song to <PLAYLIST>` — confirmation required
 
-Playback commands target the current Windows media session, which can be Spotify or a supported browser/player. Mute and volume commands target the default Windows playback device. These commands are allowed immediately and return visible, audited results.
+Generic media commands use the current Windows media session. Spotify-specific search, playback, library, and playlist commands use the configured Spotify connection.
 
-### Excel and desktop commands
+## Discord & calls
 
-### `open excel`
-Opens or attaches to an Excel session.
+- `open discord`
+- `go to discord <ALIAS>`
+- `draft discord message <TEXT>`
+- `edit discord message <TEXT>`
+- `cancel discord draft`
+- `send discord draft` or `prepare discord draft` — confirmation required; physical Enter still sends
+- `mute microphone`
+- `unmute microphone` — confirmation required
+- `deafen discord`
+- `undeafen discord` — confirmation required
+- `disable camera` or `turn off camera`
+- `enable camera` or `turn on camera` — confirmation required
+- `discord status`
+- `join discord channel <ALIAS>`
+- `leave discord call`
+- `switch discord channel <ALIAS>`
+- `draft reply <TEXT>`
+- `read current discord channel`
+- `read latest discord message`
+- `set discord input volume to <0-100>`
+- `set discord output volume to <0-100>`
+- `share current screen` — confirmation opens the share picker but does not choose a screen
+- `configure discord user token ...` — blocked
+- `send discord messages ...` — blocked
 
-### `open app <ALIAS>`
-Opens an allowlisted desktop app alias through the desktop adapter.
+Discord aliases come from `VOICE_CONTROL_USB_DISCORD_TARGETS`. Voice Control does not use a personal user token, operate as a self-bot, submit a normal user's message, or bulk-send messages.
 
-Examples:
-- `open app notepad`
-- `open app calculator`
+## Windows & safety
 
-### `open url <URL>`
-Opens an approved `http` or `https` URL through the desktop adapter.
-
-Example:
-- `open url https://example.com`
-
-### `open folder <PATH>`
-Opens a folder path through the desktop adapter.
-
-Example:
-- `open folder /tmp`
-- `open folder C:\Users`
-
-### `open workbook <PATH>`
-Opens a workbook and makes it the active workbook context for later sheet selection, saving, and navigation commands.
-
-Examples:
-- `open workbook C:\Data\audit.xlsx`
-- `open workbook /tmp/context.xlsx`
-
-### `select sheet <NAME>`
-Selects a worksheet inside the active workbook context.
-
-Examples:
-- `select sheet Sheet2`
-- `select sheet Summary`
-
-### `save workbook`
-Saves the active workbook.
-If the workbook has no path yet, the adapter rejects the command instead of guessing a save destination.
-
-### `report current sheet`
-Reports the current active worksheet together with the active workbook name.
-
-### `report current cell`
-Reports the active cell address and its current displayed value. Empty cells are reported as `<empty>`.
-
-### `go to <CELL>`
-Moves the active Excel location to a specific cell in the active worksheet and sets the start column for the current row-entry block.
-
-Examples:
-- `go to A123`
-- `go to C7`
-
-### `type pass`
-Types `pass` into the current active cell.
-
-### `type fail`
-Types `fail` into the current active cell.
-
-### `type n/a`
-Types `N/A` into the current active cell. `type not applicable` is an equivalent approved phrase.
-
-### `enter <VALUE>`
-Enters text or a number into the active cell. Integer and decimal phrases are stored as numeric Excel values; all other input is stored as text.
-
-Examples:
-- `enter inspection complete`
-- `enter 42`
-- `enter -3.5`
-
-### `undo last change`
-Restores the value that existed before the most recent assistant-made Excel cell edit. Undo is deliberately limited to one assistant edit and does not invoke Excel's global undo history. `undo last excel change` is an equivalent approved phrase.
-
-### `go left`
-Moves one column to the left. Moving left from column A is rejected clearly.
-
-### `go right`
-Moves one column to the right from the current active cell.
-
-### `go down`
-Moves one row down from the current active cell.
-
-### `go up`
-Moves one row up. Moving up from row 1 is rejected clearly.
-
-### `next row from start`
-Moves to the next row and returns to the original start column established by `go to <CELL>`.
-
-### `confirm`
-Confirms the current pending risky action in session mode.
-If nothing is pending, the assistant returns `No pending action to confirm.`
-
-### `cancel`
-Cancels the current pending risky action in session mode.
-If nothing is pending, the assistant returns `No pending action to cancel.`
-
-### `status`
-Reports whether a risky action is currently pending confirmation.
-If one is pending, the response includes the queued action and next step.
-If none is pending, the assistant returns `No pending confirmation action.`
-
-## Approved workflows
-
-### `mark pass and next row`
-Runs an approved deterministic workflow that types `pass` and moves to the next anchored row.
-
-### `mark fail and next row`
-Runs an approved deterministic workflow that types `fail` and moves to the next anchored row.
-
-### `open excel and go to A1`
-Runs an approved deterministic workflow that opens Excel and moves to `A1`.
-
-Examples:
-- `open excel`
-- `open excel and go to A1`
-- `mark pass and next row`
-- `mark fail and next row`
-- `open app notepad`
-- `open url https://example.com`
-- `open folder C:\Users`
-- `open workbook C:\Data\audit.xlsx`
-- `select sheet Sheet2`
-- `report current sheet`
-- `report current cell`
-- `go to A123`
-- `type pass`
-- `go right`
-- `type fail`
-- `go down`
-- `go left`
-- `go up`
-- `enter 42`
-- `type n/a`
-- `undo last change`
-- `save workbook`
-- `next row from start`
+- `open app <ALIAS>`
+- `open url <URL>`
+- `open folder <PATH>`
+- `status`
 - `confirm`
 - `cancel`
-- `status`
+- `shutdown` — confirmation required
+- `restart` — confirmation required
+- `switch to <APP>`
+- `close current window` — confirmation required
+- `minimize window`
+- `maximize window`
+- `restore window`
+- `snap window left`
+- `snap window right`
+- `show desktop`
+- `copy`
+- `paste`
+- `select all`
+- `take screenshot`
+- `lock computer` — confirmation required
+- `open settings <AREA>`
+- `read clipboard`
+- `clear clipboard` — confirmation required
+- `repeat that`
+- `repeat last command`
+- `undo that`
+- `cancel that`
+- `what did you hear`
+- `no, I said <CORRECTION>`
+- `show commands` or `what can I say`
+- `show <CATEGORY> commands`
+- `stop listening`
+- `kill process ...` — blocked
+- `run command ...` — blocked
 
-## Unsupported command handling
-If the text does not match the approved grammar, the assistant must not guess.
-It should create a proposal entry containing:
+`confirm`, `cancel`, and `status` manage one pending confirmation in a persistent session. `undo that` automatically reverses only the most recent supported assistant edit and reports when an action has no safe automatic undo.
 
-- original text
-- rejection reason
-- timestamp or surrounding runtime metadata in later phases
+## User routines
 
-## Safety handling
-Safe commands execute immediately.
+- `create routine <NAME>`
+- `start <NAME> routine` or `run <NAME> routine`
+- `list routines`
+- `edit routine <NAME>`
+- `delete routine <NAME>` — confirmation required
 
-Risky commands currently requiring confirmation:
-- `shutdown`
-- `restart`
+Create and edit routines in the collapsible routine builder. Drag commands from the deck into the lane, arrange the numbered cards from left to right, and select `RUN`. Routines persist in the selected runtime directory. Nested routines, routine-management steps, blocked commands, and unsupported phrases cannot be added.
 
-Blocked commands remain blocked in MVP:
-- `kill process <NAME>`
-- `run command <TEXT>`
+## Safety behavior
 
-One-shot mode:
-- `shutdown` and `restart` return a `[CONFIRMATION REQUIRED]` response and do not execute.
-- `status` reports that no pending confirmation exists because one-shot mode does not preserve state after the command finishes.
-
-Session mode:
-- `shutdown` or `restart` create a pending action and surface a clear confirmation alert.
-- `confirm` executes the pending action.
-- `cancel` clears the pending action without executing it.
-- `status` reports the currently pending action, if any.
-
-Pending-action expiry:
-- Session mode supports an optional pending-action timeout structure.
-- The current runtime keeps timeout disabled by default.
-- If enabled by configuration, expired pending actions are cleared before the next command is handled.
-
-Workflows inherit the same policy.
-If any workflow step requires confirmation, the workflow pauses behind the same confirmation gate instead of bypassing it.
-If any workflow step is blocked in MVP, the workflow is blocked as well.
-
-## Explicit MVP blocked commands
-The runtime contains explicit deterministic handling for blocked desktop actions such as:
-
-- `kill process <NAME>`
-- `run command <TEXT>`
-
-These do not execute.
-They return a `blocked in MVP` response instead.
-
-## Near-term planned commands
-- save workbook as
-- create worksheet
-- rename worksheet
-- repeat current row pattern
+- Safe commands run immediately.
+- Confirmation-required commands wait for an explicit `confirm` in a persistent session.
+- A routine containing one or more confirmation-required steps requests one confirmation for the complete chain.
+- Blocked commands never execute.
+- Unsupported or ambiguous phrases are rejected instead of guessed and are logged as proposals.

@@ -29,6 +29,7 @@ from voice_control_usb.runtime_support import (
 from voice_control_usb.spotify.connect import connect_spotify_account
 from voice_control_usb.spotify.credentials import WindowsCredentialStore
 from voice_control_usb.spotify.oauth import SpotifyOAuthClient, SpotifyOAuthConfig
+from voice_control_usb.spotify.factory import create_spotify_adapter
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             channel=namespace.browser_channel,
         )
         discord = create_discord_adapter(discord_selection)
+        spotify = create_spotify_adapter()
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
         print(f"Assistant startup failed: {error}")
@@ -274,7 +276,9 @@ def main(argv: list[str] | None = None) -> int:
             media=media,
             browser=browser,
             discord=discord,
+            spotify=spotify,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
+            routine_path=runtime_paths.routine_path,
         )
         if namespace.window:
             try:

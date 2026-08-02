@@ -16,6 +16,8 @@ class WindowsDiscordAdapter(DiscordAdapter):
         self.registry = registry
         self.target = ""
         self.draft = ""
+        self.input_volume: int | None = None
+        self.output_volume: int | None = None
 
     def open(self) -> DiscordSnapshot:
         window = self._window(launch=True)
@@ -83,7 +85,73 @@ class WindowsDiscordAdapter(DiscordAdapter):
             microphone_muted=self._button_state("Unmute", "Mute"),
             deafened=self._button_state("Undeafen", "Deafen"),
             camera_enabled=self._button_state("Turn Off Camera", "Turn On Camera"),
+            input_volume=self.input_volume,
+            output_volume=self.output_volume,
+            in_call=self._disconnect_button() is not None,
         )
+
+    def join_channel(self, alias: str) -> DiscordSnapshot:
+        self.navigate(alias)
+        window = self._window()
+        button = window.ButtonControl(RegexName=r"^(?:Join Voice|Connect)$", searchDepth=30)
+        if button.Exists(2):
+            button.GetInvokePattern().Invoke()
+            time.sleep(1)
+        if self._disconnect_button() is None:
+            raise RuntimeError("Discord did not expose a reliable voice-channel join control.")
+        return self.report()
+
+    def leave_call(self) -> DiscordSnapshot:
+        button = self._disconnect_button()
+        if button is None:
+            raise RuntimeError("Discord is not currently exposing an active call.")
+        button.GetInvokePattern().Invoke()
+        time.sleep(0.5)
+        return self.report()
+
+    def read_channel(self) -> str:
+        return self.target or self._window().Name.removesuffix(" - Discord")
+
+    def read_latest_message(self) -> str:
+        try:
+            import uiautomation as auto
+        except ImportError as error:
+            raise ImportError("Windows Discord control requires uiautomation.") from error
+        candidates: list[str] = []
+        try:
+            for control, depth in auto.WalkControl(self._window(), includeTop=False, maxDepth=35):
+                if depth > 35 or control.ControlTypeName not in {"TextControl", "DocumentControl"}:
+                    continue
+                name = " ".join(str(control.Name or "").split())
+                if name and len(name) <= 500 and control.IsEnabled:
+                    candidates.append(name)
+        except Exception as error:
+            raise RuntimeError(f"Discord message accessibility scan failed: {error}") from error
+        if not candidates:
+            raise RuntimeError("No readable Discord message is visible in the current channel.")
+        return candidates[-1]
+
+    def set_input_volume(self, percent: int) -> DiscordSnapshot:
+        self._set_settings_slider("Input Volume", percent)
+        self.input_volume = percent
+        return self.report()
+
+    def set_output_volume(self, percent: int) -> DiscordSnapshot:
+        self._set_settings_slider("Output Volume", percent)
+        self.output_volume = percent
+        return self.report()
+
+    def prepare_screen_share(self) -> DiscordSnapshot:
+        if self._disconnect_button() is None:
+            raise RuntimeError("Join a Discord call before preparing screen share.")
+        button = self._window().ButtonControl(
+            RegexName=r"^(?:Share Your Screen|Share Screen|Screen)$",
+            searchDepth=30,
+        )
+        if not button.Exists(2):
+            raise RuntimeError("Discord does not expose a screen-share button in the current call view.")
+        button.GetInvokePattern().Invoke()
+        return self.report()
 
     def _set_binary_button(self, desired: bool, *, enabled_name: str, disabled_name: str, label: str) -> None:
         current = self._button_state(enabled_name, disabled_name)
@@ -102,6 +170,33 @@ class WindowsDiscordAdapter(DiscordAdapter):
         if window.ButtonControl(Name=enabled_name, searchDepth=30).Exists(0): return True
         if window.ButtonControl(Name=disabled_name, searchDepth=30).Exists(0): return False
         return None
+
+    def _disconnect_button(self):
+        button = self._window().ButtonControl(
+            RegexName=r"^(?:Disconnect|Leave Call)$",
+            searchDepth=30,
+        )
+        return button if button.Exists(0) else None
+
+    def _set_settings_slider(self, name: str, percent: int) -> None:
+        if not 0 <= percent <= 100:
+            raise ValueError("Discord volume must be between 0 and 100 percent.")
+        window = self._window()
+        slider = window.SliderControl(Name=name, searchDepth=35)
+        if not slider.Exists(0):
+            settings = window.ButtonControl(Name="User Settings", searchDepth=30)
+            if not settings.Exists(2):
+                raise RuntimeError("Discord does not expose the User Settings control.")
+            settings.GetInvokePattern().Invoke()
+            time.sleep(0.8)
+            slider = self._window().SliderControl(Name=name, searchDepth=35)
+        if not slider.Exists(2):
+            raise RuntimeError(f"Discord does not expose the {name} slider.")
+        pattern = slider.GetRangeValuePattern()
+        if pattern is None or pattern.IsReadOnly:
+            raise RuntimeError(f"Discord {name} is not safely adjustable.")
+        minimum, maximum = float(pattern.Minimum), float(pattern.Maximum)
+        pattern.SetValue(minimum + ((maximum - minimum) * percent / 100))
 
     def _composer(self):
         composer = self._window().EditControl(RegexName=r"^Message(?: |$)", searchDepth=30)

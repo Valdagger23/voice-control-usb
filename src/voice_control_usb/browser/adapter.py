@@ -61,6 +61,18 @@ class BrowserAdapter:
     def open_link(self, index: int) -> BrowserPage:
         raise NotImplementedError
 
+    def switch_tab_title(self, title: str) -> BrowserPage: raise NotImplementedError
+    def close_tab_index(self, index: int) -> BrowserPage: raise NotImplementedError
+    def duplicate_tab(self) -> BrowserPage: raise NotImplementedError
+    def find_text(self, text: str) -> int: raise NotImplementedError
+    def zoom(self, direction: str) -> tuple[BrowserPage, int]: raise NotImplementedError
+    def scroll_edge(self, position: str) -> BrowserPage: raise NotImplementedError
+    def read_headings(self) -> tuple[str, ...]: raise NotImplementedError
+    def read_selection(self) -> str: raise NotImplementedError
+    def copy_page_url(self) -> str: raise NotImplementedError
+    def stop_loading(self) -> BrowserPage: raise NotImplementedError
+    def reopen_closed_tab(self) -> BrowserPage: raise NotImplementedError
+
     def close(self) -> None:
         return
 
@@ -91,6 +103,10 @@ class StubBrowserAdapter(BrowserAdapter):
             BrowserLink(2, "Documentation", "https://example.com/docs"),
         )
         self.link_snapshot_url = "about:blank"
+        self.closed_urls: list[str] = []
+        self.zoom_percent = 100
+        self.selected_text = "Example selected text"
+        self.copied_url = ""
 
     def open_url(self, url: str) -> BrowserPage:
         _validate_web_url(url)
@@ -103,6 +119,7 @@ class StubBrowserAdapter(BrowserAdapter):
         return self.report_page()
 
     def close_tab(self) -> BrowserPage:
+        self.closed_urls.append(self._tab.url)
         if len(self.tabs) == 1:
             self.tabs[0] = _StubTab()
         else:
@@ -161,6 +178,69 @@ class StubBrowserAdapter(BrowserAdapter):
         if link is None:
             raise ValueError("Link number is not in the most recent visible link list.")
         return self.open_url(link.url)
+
+    def switch_tab_title(self, title: str) -> BrowserPage:
+        matches = [
+            page
+            for page in self.list_tabs()
+            if title.casefold() in page.title.casefold()
+        ]
+        if not matches:
+            raise ValueError(f"No browser tab title contains: {title}")
+        if len(matches) > 1:
+            raise ValueError(f"Multiple browser tab titles contain: {title}")
+        return self.switch_tab(matches[0].tab_index)
+
+    def close_tab_index(self, index: int) -> BrowserPage:
+        self.switch_tab(index)
+        return self.close_tab()
+
+    def duplicate_tab(self) -> BrowserPage:
+        url = self._tab.url
+        self.new_tab()
+        if url != "about:blank":
+            return self.open_url(url)
+        return self.report_page()
+
+    def find_text(self, text: str) -> int:
+        haystack = f"Example link Documentation {self._tab.url}"
+        return haystack.casefold().count(text.casefold())
+
+    def zoom(self, direction: str) -> tuple[BrowserPage, int]:
+        if direction == "in":
+            self.zoom_percent = min(500, self.zoom_percent + 10)
+        elif direction == "out":
+            self.zoom_percent = max(25, self.zoom_percent - 10)
+        elif direction == "reset":
+            self.zoom_percent = 100
+        else:
+            raise ValueError("Browser zoom direction must be in, out, or reset.")
+        return self.report_page(), self.zoom_percent
+
+    def scroll_edge(self, position: str) -> BrowserPage:
+        if position not in {"top", "bottom"}:
+            raise ValueError("Browser scroll position must be top or bottom.")
+        return self.report_page()
+
+    def read_headings(self) -> tuple[str, ...]:
+        return ("Example heading", "Documentation")
+
+    def read_selection(self) -> str:
+        return self.selected_text
+
+    def copy_page_url(self) -> str:
+        self.copied_url = self._tab.url
+        return self.copied_url
+
+    def stop_loading(self) -> BrowserPage:
+        return self.report_page()
+
+    def reopen_closed_tab(self) -> BrowserPage:
+        if not self.closed_urls:
+            raise RuntimeError("There is no recently closed browser tab.")
+        url = self.closed_urls.pop()
+        self.new_tab()
+        return self.open_url(url) if url != "about:blank" else self.report_page()
 
     @property
     def _tab(self) -> _StubTab:

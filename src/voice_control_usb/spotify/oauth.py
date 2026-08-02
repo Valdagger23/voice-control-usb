@@ -22,6 +22,9 @@ DEFAULT_SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8765/callback"
 DEFAULT_SPOTIFY_SCOPES = (
     "user-read-playback-state",
     "user-modify-playback-state",
+    "user-library-modify",
+    "playlist-read-private",
+    "playlist-modify-private",
 )
 
 TokenPost = Callable[[str, Mapping[str, str]], Mapping[str, object]]
