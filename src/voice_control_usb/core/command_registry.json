@@ -130,12 +130,18 @@
       "pattern": "^report current sheet$"
     },
     {
+      "name": "report_current_cell",
+      "action": "report_current_cell",
+      "description": "Report the active Excel cell and its current value.",
+      "pattern": "^report current cell$"
+    },
+    {
       "name": "go_to_cell",
       "action": "go_to_cell",
       "description": "Move the active Excel selection to a specific cell.",
       "pattern": "^go to (?P<cell>[A-Za-z]{1,3}[1-9][0-9]{0,6})$",
       "argument_transforms": {
-        "cell": "upper"
+        "cell": "excel_cell"
       }
     },
     {
@@ -157,6 +163,36 @@
       }
     },
     {
+      "name": "type_not_applicable",
+      "action": "type_text",
+      "description": "Type 'N/A' into the active cell.",
+      "pattern": "^type (?:n/a|not applicable)$",
+      "fixed_arguments": {
+        "value": "N/A"
+      }
+    },
+    {
+      "name": "enter_value",
+      "action": "type_text",
+      "description": "Enter a text or numeric value into the active cell.",
+      "pattern": "^enter (?P<value>.+)$",
+      "argument_transforms": {
+        "value": "excel_value"
+      }
+    },
+    {
+      "name": "undo_last_excel_change",
+      "action": "undo_last_excel_change",
+      "description": "Restore the value before the last assistant-made Excel cell edit.",
+      "pattern": "^undo last (?:excel )?change$"
+    },
+    {
+      "name": "go_left",
+      "action": "go_left",
+      "description": "Move the active selection one column to the left.",
+      "pattern": "^go left$"
+    },
+    {
       "name": "go_right",
       "action": "go_right",
       "description": "Move the active selection one column to the right.",
@@ -167,6 +203,12 @@
       "action": "go_down",
       "description": "Move the active selection one row down.",
       "pattern": "^go down$"
+    },
+    {
+      "name": "go_up",
+      "action": "go_up",
+      "description": "Move the active selection one row up.",
+      "pattern": "^go up$"
     },
     {
       "name": "next_row_from_start",

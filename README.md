@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 1 capability-core implementation is complete on top of the approved Phase 0 reset.
+Phase 2 basic Excel vertical-slice implementation is complete on top of the approved Phase 1 capability core.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
-- Basic Excel control is the first vertical slice.
+- Basic Excel control now works through a visible typed Windows shell and native COM adapter.
 - Media/Spotify, browser/Google, and Discord capabilities follow after Excel is proven on Windows.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is the native Windows Excel vertical slice.
+- The next implementation phase is controlled push-to-talk speech in front of the same command pipeline.
 
 Planning documents:
 
@@ -21,6 +21,7 @@ Planning documents:
 - [Safety model](docs/SAFETY.md)
 - [Phase 0 baseline](docs/PHASE_0_BASELINE.md)
 - [Phase 1 baseline](docs/PHASE_1_BASELINE.md)
+- [Phase 2 baseline](docs/PHASE_2_BASELINE.md)
 
 ## Existing prototype
 
@@ -42,6 +43,15 @@ Phase 1 additionally provides:
 - application-neutral session context
 - structured JSONL audit events at `runtime/audit/events.jsonl`
 
+Phase 2 additionally provides:
+
+- a visible Windows command window with transcript and execution status
+- native Excel workbook, sheet, cell, entry, navigation, save, and reporting operations
+- text, integer, decimal, `pass`, `fail`, and `N/A` cell entry
+- four-way cell navigation and worksheet-boundary checks
+- one-level undo for the most recent assistant-made cell edit
+- clear missing-workbook, protected-sheet, invalid-cell, and lost-session failures
+
 ## Development environment
 - Active repository: `D:\VoiceControl`
 - Windows Python 3.12 or newer in a project-local `.venv`
@@ -53,7 +63,7 @@ Windows setup:
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e ".[windows]"
 ```
 
 ## Trusted USB starter
@@ -78,6 +88,7 @@ py -3 -m venv .venv
 - Details: [docs/DESKTOP_ACTIONS.md](docs/DESKTOP_ACTIONS.md)
 
 ## Runtime modes
+- Visible Windows mode: `--window` opens the typed assistant shell and selects native Excel COM by default on Windows
 - One-shot mode: runs one command and exits
 - Session mode: `--session` keeps one assistant process alive and preserves Excel context across commands
 - Speech session mode: `--session --input-mode speech` accepts controlled `record ...` activations and routes recognized text into the same assistant pipeline
@@ -94,6 +105,8 @@ py -3 -m venv .venv
 Windows baseline:
 
 - `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
+- `.\.venv\Scripts\python.exe scripts\verify_excel_com.py`
+- `.\.venv\Scripts\python.exe -m voice_control_usb --window`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel"`
 - `.\.venv\Scripts\python.exe -m voice_control_usb "open excel and go to A1"`
 
@@ -117,8 +130,10 @@ WSL baseline, when the USB filesystem is mounted:
 - `printf '\nopen workbook /tmp/context.xlsx\n\nselect sheet Sheet2\n\nreport current sheet\nquit\n' | PYTHONPATH=src .venv/bin/python -m voice_control_usb --session --input-mode speech --speech-activation ptt`
 
 ## Windows COM verification
-- `python -m pip install pywin32`
+- `python -m pip install -e ".[windows]"`
 - `set PYTHONPATH=src`
+- `python scripts\verify_excel_com.py`
+- `python -m voice_control_usb --window`
 - `python -m voice_control_usb --excel-adapter com "open excel"`
 - `python -m voice_control_usb --excel-adapter com "go to A123"`
 - `python -m voice_control_usb --desktop-adapter windows "open app notepad"`

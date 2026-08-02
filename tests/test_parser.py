@@ -129,10 +129,45 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(result.command.action, "type_text")
         self.assertEqual(result.command.arguments, {"value": "fail"})
 
+    def test_parse_excel_values_preserves_text_and_converts_numbers(self) -> None:
+        cases = (
+            ("enter inspection complete", "inspection complete"),
+            ("enter 42", 42),
+            ("enter -3.5", -3.5),
+            ("type n/a", "N/A"),
+            ("type not applicable", "N/A"),
+        )
+
+        for raw_text, expected_value in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, "type_text")
+                self.assertEqual(result.command.arguments, {"value": expected_value})
+
+    def test_parse_excel_reporting_and_undo_commands(self) -> None:
+        cases = (
+            ("report current cell", "report_current_cell"),
+            ("undo last change", "undo_last_excel_change"),
+            ("undo last excel change", "undo_last_excel_change"),
+        )
+
+        for raw_text, expected_action in cases:
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNotNone(result.command)
+                assert result.command is not None
+                self.assertEqual(result.command.action, expected_action)
+
     def test_parse_navigation_commands_from_registry(self) -> None:
         for raw_text, expected_name in (
+            ("go left", "go_left"),
             ("go right", "go_right"),
             ("go down", "go_down"),
+            ("go up", "go_up"),
             ("next row from start", "next_row_from_start"),
         ):
             with self.subTest(raw_text=raw_text):
@@ -191,6 +226,16 @@ class CommandParserTests(unittest.TestCase):
         self.assertIsNotNone(result.proposal)
         assert result.proposal is not None
         self.assertIn("deterministic command registry", result.proposal.reason)
+
+    def test_parse_out_of_bounds_excel_cells_become_proposals(self) -> None:
+        for raw_text in ("go to XFE1", "go to A1048577"):
+            with self.subTest(raw_text=raw_text):
+                result = self.parser.parse(raw_text)
+
+                self.assertIsNone(result.command)
+                self.assertIsNotNone(result.proposal)
+                assert result.proposal is not None
+                self.assertIn("outside worksheet bounds", result.proposal.reason)
 
 
 if __name__ == "__main__":

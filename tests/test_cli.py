@@ -83,6 +83,17 @@ class CliTests(unittest.TestCase):
             ],
         )
 
+    def test_window_mode_runs_visible_shell_with_shared_app(self) -> None:
+        with patch("voice_control_usb.assistant.cli.run_windows_shell") as run_window:
+            exit_code = cli.main(["--window", "--excel-adapter", "stub"])
+
+        self.assertEqual(exit_code, 0)
+        run_window.assert_called_once()
+        self.assertEqual(
+            run_window.call_args.args[0].executor.excel.__class__.__name__,
+            "StubExcelAdapter",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

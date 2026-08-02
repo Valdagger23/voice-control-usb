@@ -35,6 +35,8 @@ Exit: existing commands pass through the new capability contract and the full ba
 
 Goal: deliver the first real user workflow on native Windows.
 
+Status: complete on the `agent/phase-2-excel-vertical-slice` branch.
+
 - Add the minimal Windows shell with typed input and visible state.
 - Complete Excel COM support for workbook, sheet, cell, entry, navigation, and save operations.
 - Add current-cell reporting and a reversible record for assistant-made cell edits.

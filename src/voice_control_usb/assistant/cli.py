@@ -9,6 +9,7 @@ import sys
 
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.session import run_session, run_speech_session
+from voice_control_usb.assistant.windows_shell import run_windows_shell
 from voice_control_usb.audio.factory import create_speech_activator, create_speech_transcriber
 from voice_control_usb.core.audit import JsonlAuditStore
 from voice_control_usb.desktop.factory import create_desktop_adapter
@@ -42,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
         "--session",
         action="store_true",
         help="Run a long-lived session and read one command per line from stdin.",
+    )
+    parser.add_argument(
+        "--window",
+        action="store_true",
+        help="Open the visible Windows assistant window with typed input.",
     )
     parser.add_argument(
         "--input-mode",
@@ -83,10 +89,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     namespace = parser.parse_args(raw_args)
-    if not namespace.session and not namespace.command:
-        parser.error("one-shot mode requires a command, or use --session")
+    if namespace.session and namespace.window:
+        parser.error("choose either --session or --window")
+    if not namespace.session and not namespace.window and not namespace.command:
+        parser.error("one-shot mode requires a command, or use --session or --window")
+    if namespace.window and namespace.command:
+        parser.error("window mode does not accept a one-shot command")
     if namespace.input_mode == "speech" and not namespace.session:
         parser.error("speech input mode requires --session")
+
+    excel_selection = namespace.excel_adapter
+    if (
+        namespace.window
+        and not any(
+            argument == "--excel-adapter" or argument.startswith("--excel-adapter=")
+            for argument in raw_args
+        )
+        and "VOICE_CONTROL_USB_EXCEL_ADAPTER" not in os.environ
+        and sys.platform == "win32"
+    ):
+        excel_selection = "com"
 
     try:
         runtime_paths = AssistantRuntimePaths.from_cli(
@@ -105,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     try:
-        excel = create_excel_adapter(namespace.excel_adapter)
+        excel = create_excel_adapter(excel_selection)
         desktop = create_desktop_adapter(namespace.desktop_adapter)
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
@@ -119,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
             desktop=desktop,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
+        if namespace.window:
+            run_windows_shell(app)
+            return 0
         if namespace.session:
             if namespace.input_mode == "speech":
                 try:

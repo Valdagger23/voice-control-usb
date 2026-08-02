@@ -146,6 +146,124 @@ class ExecutionEngineTests(unittest.TestCase):
 
         self.assertEqual(result, "Moved down to C8")
 
+    def test_executor_supports_four_way_navigation_with_sheet_boundaries(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
+        engine.execute(
+            Command("go_to_cell", "go_to_cell", {"cell": "B2"}, "go to B2")
+        )
+
+        self.assertEqual(
+            engine.execute(Command("go_left", "go_left", {}, "go left")),
+            "Moved left to A2",
+        )
+        self.assertEqual(
+            engine.execute(Command("go_up", "go_up", {}, "go up")),
+            "Moved up to A1",
+        )
+        with self.assertRaisesRegex(ValueError, "column A"):
+            engine.execute(Command("go_left", "go_left", {}, "go left"))
+        with self.assertRaisesRegex(ValueError, "row 1"):
+            engine.execute(Command("go_up", "go_up", {}, "go up"))
+
+        engine.execute(
+            Command("go_to_cell", "go_to_cell", {"cell": "XFD1"}, "go to XFD1")
+        )
+        with self.assertRaisesRegex(ValueError, "column XFD"):
+            engine.execute(Command("go_right", "go_right", {}, "go right"))
+
+        engine.execute(
+            Command(
+                "go_to_cell",
+                "go_to_cell",
+                {"cell": "A1048576"},
+                "go to A1048576",
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "row 1048576"):
+            engine.execute(Command("go_down", "go_down", {}, "go down"))
+
+    def test_executor_enters_reports_and_undoes_typed_and_numeric_values(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
+        engine.execute(Command("go_to_cell", "go_to_cell", {"cell": "C4"}, "go to C4"))
+        first = engine.execute(
+            Command("enter_value", "type_text", {"value": 42}, "enter 42")
+        )
+        report = engine.execute(
+            Command("report_current_cell", "report_current_cell", {}, "report current cell")
+        )
+        engine.execute(
+            Command("enter_value", "type_text", {"value": "N/A"}, "enter N/A")
+        )
+        undone = engine.execute(
+            Command(
+                "undo_last_excel_change",
+                "undo_last_excel_change",
+                {},
+                "undo last change",
+            )
+        )
+
+        self.assertEqual(first, "Typed 42 into C4")
+        self.assertEqual(report, "Current cell: C4 (value: 42)")
+        self.assertEqual(undone, "Undid last Excel change in Sheet1!C4.")
+        self.assertEqual(excel.cells["C4"], 42)
+        self.assertEqual(
+            engine.execute(
+                Command(
+                    "undo_last_excel_change",
+                    "undo_last_excel_change",
+                    {},
+                    "undo last change",
+                )
+            ),
+            "No assistant-made Excel change to undo.",
+        )
+
+    def test_undo_restores_an_empty_cell_after_moving_to_another_sheet(self) -> None:
+        excel = StubExcelAdapter()
+        engine = ExecutionEngine(
+            excel=excel,
+            desktop=StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
+        )
+        engine.execute(Command("go_to_cell", "go_to_cell", {"cell": "A1"}, "go to A1"))
+        engine.execute(Command("enter_value", "type_text", {"value": "check"}, "enter check"))
+        engine.execute(
+            Command(
+                "select_sheet",
+                "select_sheet",
+                {"sheet_name": "Sheet2"},
+                "select sheet Sheet2",
+            )
+        )
+
+        result = engine.execute(
+            Command(
+                "undo_last_excel_change",
+                "undo_last_excel_change",
+                {},
+                "undo last change",
+            )
+        )
+
+        self.assertEqual(result, "Undid last Excel change in Sheet1!A1.")
+        engine.execute(
+            Command(
+                "select_sheet",
+                "select_sheet",
+                {"sheet_name": "Sheet1"},
+                "select sheet Sheet1",
+            )
+        )
+        self.assertNotIn("A1", excel.cells)
+
     def test_sheet_selection_preserves_per_sheet_navigation_context(self) -> None:
         excel = StubExcelAdapter()
         engine = ExecutionEngine(

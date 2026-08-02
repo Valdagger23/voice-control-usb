@@ -23,6 +23,7 @@ Examples:
 - `python -m voice_control_usb --excel-adapter com "open excel"`
 - `python -m voice_control_usb --excel-adapter com --session`
 - `python -m voice_control_usb --excel-adapter com --session --input-mode speech`
+- `python -m voice_control_usb --window`
 
 You can also select the adapter through:
 - `VOICE_CONTROL_USB_EXCEL_ADAPTER=stub`
@@ -37,11 +38,18 @@ The stub preserves deterministic workbook, sheet, and movement semantics for:
 - `select sheet <NAME>`
 - `save workbook`
 - `report current sheet`
+- `report current cell`
 - `go to A123`
 - `type pass`
 - `type fail`
+- `type n/a`
+- `enter 42`
+- `enter inspection complete`
+- `undo last change`
+- `go left`
 - `go right`
 - `go down`
+- `go up`
 - `next row from start`
 
 No live Excel process is controlled in WSL.
@@ -73,15 +81,35 @@ Implemented commands:
 - `select sheet <NAME>`
 - `save workbook`
 - `report current sheet`
+- `report current cell`
 - `go to A123`
 - `type pass`
 - `type fail`
+- `type n/a`
+- `enter <VALUE>`
+- `undo last change`
+- `go left`
 - `go right`
 - `go down`
+- `go up`
 - `next row from start`
 
 `next row from start` preserves the same anchor semantics as the stub adapter by remembering the column established by `go to <CELL>`.
 Workbook and worksheet context are explicit, so commands like `select sheet <NAME>` and `report current sheet` operate against the active workbook instead of assuming only a single active selection.
+
+`enter <VALUE>` preserves integers and decimal values as numeric Excel values and treats other input as text. Cell references are checked against Excel's real worksheet bounds before execution. The adapter records the prior value for the most recent assistant-made cell edit, so `undo last change` restores that value without touching Excel's wider undo history.
+
+Missing workbook paths, protected worksheets, invalid cell references, worksheet movement boundaries, and disconnected Excel sessions produce explicit failures. The assistant does not guess a recovery action or save destination.
+
+## Visible Windows shell
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m voice_control_usb --window
+```
+
+The window shows typed commands, assistant responses, and current execution status. On Windows, `--window` selects the COM adapter unless an adapter or environment override is supplied. Use `--window --excel-adapter stub` for a demonstration that does not control Excel.
 
 ## Windows setup
 Install the Windows dependency in a Windows Python environment:
@@ -92,9 +120,19 @@ Or:
 
 - `pip install .[windows]`
 
+The project-local equivalent is:
+
+- `.\.venv\Scripts\python.exe -m pip install -e ".[windows]"`
+
 ## Manual Windows verification
 Run these in a Windows shell from the repository root.
 Use a single Python process for context-sensitive workflows:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_excel_com.py
+```
+
+That repeatable check creates a separate hidden Excel process and temporary workbook, exercises entry, reporting, four-way movement, undo, save, protected-sheet rejection, and missing-workbook rejection, and then removes the temporary assets.
 
 ```powershell
 python -m pip install pywin32
@@ -105,9 +143,15 @@ open workbook C:\path\to\context.xlsx
 select sheet Sheet2
 report current sheet
 go to A123
-type pass
+enter 42
+report current cell
 go right
-type fail
+type pass
+go down
+go left
+go up
+type n/a
+undo last change
 save workbook
 next row from start
 quit

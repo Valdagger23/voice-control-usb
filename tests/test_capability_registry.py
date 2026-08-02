@@ -94,6 +94,25 @@ class CapabilityRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "result identity"):
             registry.execute(Command(name="run", action="run"))
 
+    def test_registry_accepts_declared_union_argument_types(self) -> None:
+        registry = CapabilityRegistry()
+        spec = ActionSpec(
+            capability_id="example",
+            action_id="set_value",
+            description="Set a value.",
+            argument_types={"value": (str, int, float)},
+        )
+        registry.register(spec, lambda command: "done")
+
+        self.assertEqual(
+            registry.execute(
+                Command("set_value", "set_value", {"value": 1.5})
+            ).message,
+            "done",
+        )
+        with self.assertRaisesRegex(ValueError, "str or int or float"):
+            registry.execute(Command("set_value", "set_value", {"value": object()}))
+
     def test_engine_exposes_capability_metadata_and_structured_results(self) -> None:
         engine = ExecutionEngine(
             excel=StubExcelAdapter(),

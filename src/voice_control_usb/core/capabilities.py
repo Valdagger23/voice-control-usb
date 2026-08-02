@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from voice_control_usb.core.models import Command
 
@@ -20,6 +20,9 @@ class SafetyClass(str, Enum):
     CANCEL = "cancel"
 
 
+ArgumentType: TypeAlias = type[object] | tuple[type[object], ...]
+
+
 @dataclass(frozen=True, slots=True)
 class ActionSpec:
     """Stable metadata for one action exposed by a capability."""
@@ -29,7 +32,7 @@ class ActionSpec:
     description: str
     safety_class: SafetyClass = SafetyClass.ALLOWED
     reversible: bool = False
-    argument_types: dict[str, type[object]] = field(default_factory=dict)
+    argument_types: dict[str, ArgumentType] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.capability_id.strip():
@@ -151,7 +154,11 @@ class CapabilityRegistry:
         for name, expected_type in spec.argument_types.items():
             value = command.arguments[name]
             if not isinstance(value, expected_type):
+                if isinstance(expected_type, tuple):
+                    expected_name = " or ".join(item.__name__ for item in expected_type)
+                else:
+                    expected_name = expected_type.__name__
                 raise ValueError(
                     f"Action '{spec.action_id}' argument '{name}' must be "
-                    f"{expected_type.__name__}."
+                    f"{expected_name}."
                 )
