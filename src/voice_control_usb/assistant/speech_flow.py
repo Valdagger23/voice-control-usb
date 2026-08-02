@@ -9,6 +9,7 @@ from typing import Callable
 from voice_control_usb.assistant.app import AssistantApp
 from voice_control_usb.assistant.command_legend import COMMAND_SECTIONS
 from voice_control_usb.audio.speech_profile import (
+    PhraseInterpretation,
     SpeechProfile,
     apply_personal_correction,
     match_safe_static_command,
@@ -107,6 +108,14 @@ def dispatch_transcription(
     if correction is not None and correction.source == "personal":
         interpretation_source = correction.source
     interpreted_text = normalize_spoken_command(source_text)
+    if app.parser.parse(interpreted_text).command is None:
+        punctuation_recovery = recover_terminal_command_punctuation(
+            interpreted_text,
+            lambda candidate: app.parser.parse(candidate).command is not None,
+        )
+        if punctuation_recovery.source == "terminal_punctuation":
+            interpreted_text = punctuation_recovery.text
+            interpretation_source = punctuation_recovery.source
     if (
         speech_profile is not None
         and speech_profile.command_matching
@@ -210,3 +219,24 @@ def normalize_spoken_command(transcript: str) -> str:
         return f"go to {column_words.get(column, column.upper())}{row_words.get(row, row)}"
 
     return normalized
+
+
+def recover_terminal_command_punctuation(
+    transcript: str,
+    is_supported: Callable[[str], bool],
+) -> PhraseInterpretation:
+    """Remove recognizer sentence punctuation only when that reveals a command."""
+
+    if is_supported(transcript):
+        return PhraseInterpretation(transcript)
+    without_terminal_punctuation = re.sub(r"[.!?,;:…]+$", "", transcript).rstrip()
+    if (
+        without_terminal_punctuation != transcript
+        and is_supported(without_terminal_punctuation)
+    ):
+        return PhraseInterpretation(
+            without_terminal_punctuation,
+            "terminal_punctuation",
+            1.0,
+        )
+    return PhraseInterpretation(transcript)

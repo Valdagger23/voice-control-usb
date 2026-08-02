@@ -35,6 +35,8 @@ The exact heard phrase is then mapped to `open excel` on later captures. Correct
 
 The recognition result still passes through the same deterministic parser and safety policy. Low-confidence results execute nothing. Command-aware recovery applies only to safe, fixed phrases and only when one match is clearly better than the alternatives.
 
+Recognizers commonly add sentence punctuation, such as transcribing `open Excel` as `Open Excel.`. When the punctuated text is unsupported but removing only its trailing punctuation produces a valid command, the assistant uses that valid command and shows the interpretation. Punctuation is preserved in already-valid free-form values such as Discord drafts, Google searches, URLs, formulas, and cell text.
+
 For a source installation, install the accuracy components with:
 
 ```powershell

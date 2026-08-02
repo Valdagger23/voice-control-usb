@@ -126,7 +126,7 @@ COMMAND_SECTIONS: tuple[LegendSection, ...] = (
         "Media",
         "#A78BFA",
         (
-            _command("play_media", "play | play music | resume media", "play music", "Start or resume playback."),
+            _command("play_media", "music | play | play music | resume media", "play music", "Start or resume playback."),
             _command("pause_media", "pause | pause music", "pause music", "Pause playback."),
             _command("next_track", "next track | skip song", "next track", "Skip to the next item."),
             _command("previous_track", "previous track | previous song", "previous track", "Return to the previous item."),

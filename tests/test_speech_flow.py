@@ -7,10 +7,12 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from voice_control_usb.assistant.app import AssistantApp
+from voice_control_usb.assistant.command_legend import COMMAND_SECTIONS
 from voice_control_usb.assistant.speech_flow import (
     dispatch_transcription,
     normalize_spoken_command,
     record_speech_failure,
+    recover_terminal_command_punctuation,
 )
 from voice_control_usb.audio.transcriber import (
     TranscriptionResult,
@@ -194,6 +196,72 @@ class SpeechFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(result.interpreted_text, "enter open exel")
+
+    def test_recognizer_terminal_punctuation_is_removed_for_valid_commands(self) -> None:
+        for transcript, expected in (
+            ("Open Excel.", "Open Excel"),
+            ("play music.", "play music"),
+            ("music.", "music"),
+            ("pause music!", "pause music"),
+            ("next track?", "next track"),
+            ("type pass…", "type pass"),
+        ):
+            with self.subTest(transcript=transcript):
+                app, _excel, audit, temporary = self.make_app()
+                self.addCleanup(temporary.cleanup)
+
+                result = dispatch_transcription(
+                    app,
+                    TranscriptionResult(TranscriptionStatus.RECOGNIZED, transcript),
+                    speech_profile=SpeechProfile(command_matching=False),
+                )
+
+                self.assertEqual(result.interpreted_text, expected)
+                self.assertEqual(
+                    audit.events[0].details["interpretation_source"],
+                    "terminal_punctuation",
+                )
+
+    def test_terminal_punctuation_is_preserved_in_valid_free_form_values(self) -> None:
+        for transcript in (
+            "enter meeting complete.",
+            "search google for weather tomorrow.",
+            "draft discord message hello there.",
+            "open url https://example.com.",
+        ):
+            with self.subTest(transcript=transcript):
+                app, _excel, _audit, temporary = self.make_app()
+                self.addCleanup(temporary.cleanup)
+
+                result = dispatch_transcription(
+                    app,
+                    TranscriptionResult(TranscriptionStatus.RECOGNIZED, transcript),
+                    speech_profile=SpeechProfile(),
+                )
+
+                self.assertEqual(result.interpreted_text, transcript)
+
+    def test_command_catalogue_recovers_sentence_punctuation_when_needed(self) -> None:
+        app, _excel, _audit, temporary = self.make_app()
+        self.addCleanup(temporary.cleanup)
+
+        def supported(text: str) -> bool:
+            return app.parser.parse(text).command is not None
+
+        checked = 0
+
+        for section in COMMAND_SECTIONS:
+            for command in section.commands:
+                example = command.example
+                if not supported(example):
+                    continue
+                punctuated = f"{example}."
+                recovery = recover_terminal_command_punctuation(punctuated, supported)
+                expected = punctuated if supported(punctuated) else example
+                self.assertEqual(recovery.text, expected, command.phrase)
+                checked += 1
+
+        self.assertGreater(checked, 100)
 
     def test_spoken_correction_can_train_the_previous_mishearing(self) -> None:
         app, _excel, _audit, temporary = self.make_app()

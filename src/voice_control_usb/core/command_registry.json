@@ -10,7 +10,7 @@
       "name": "play_media",
       "action": "play_media",
       "description": "Start or resume the current media session.",
-      "pattern": "^(?:play|resume)(?: media| music)?$"
+      "pattern": "^(?:music|(?:play|resume)(?: media| music)?)$"
     },
     {
       "name": "browser_open_url",

@@ -70,6 +70,7 @@ def main() -> int:
                 provider=LOCAL_WHISPER,
                 model=args.model,
                 confidence_threshold=0.0,
+                command_matching=False,
             ),
         )
         if dispatch.message != "Excel session ready (stub)":
