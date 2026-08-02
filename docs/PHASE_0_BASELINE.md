@@ -27,8 +27,8 @@ Command:
 
 Result:
 
-- 95 tests passed.
-- 2 tests were skipped because the existing suite marks live Windows desktop and Excel COM selection for manual verification.
+- 95 tests completed successfully: 93 passed and 2 were skipped.
+- The skipped tests mark live Windows desktop and Excel COM selection for manual verification.
 - A test that assumed the POSIX-only `/tmp` directory was changed to use a platform-neutral temporary directory. Runtime behavior was not changed.
 
 ## Phase 0 documentation
