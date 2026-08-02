@@ -17,6 +17,7 @@ from voice_control_usb.browser.factory import (
 )
 from voice_control_usb.core.audit import JsonlAuditStore
 from voice_control_usb.desktop.factory import create_desktop_adapter
+from voice_control_usb.discord.factory import create_discord_adapter
 from voice_control_usb.excel.factory import create_excel_adapter
 from voice_control_usb.media.factory import create_media_adapter
 from voice_control_usb.runtime_support import (
@@ -65,6 +66,12 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("VOICE_CONTROL_USB_BROWSER_CHANNEL", "chrome"),
         choices=("chrome", "msedge"),
         help="Choose Chrome or Edge for the assistant-controlled browser.",
+    )
+    parser.add_argument(
+        "--discord-adapter",
+        default=os.environ.get("VOICE_CONTROL_USB_DISCORD_ADAPTER", "stub"),
+        choices=("stub", "windows"),
+        help="Select the visible Discord adapter implementation.",
     )
     parser.add_argument(
         "--session",
@@ -165,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     excel_selection = namespace.excel_adapter
     media_selection = namespace.media_adapter
     browser_selection = namespace.browser_adapter
+    discord_selection = namespace.discord_adapter
     speech_selection = namespace.speech_provider
     if (
         namespace.window
@@ -196,6 +204,16 @@ def main(argv: list[str] | None = None) -> int:
         and sys.platform == "win32"
     ):
         browser_selection = "playwright"
+    if (
+        namespace.window
+        and not any(
+            argument == "--discord-adapter" or argument.startswith("--discord-adapter=")
+            for argument in raw_args
+        )
+        and "VOICE_CONTROL_USB_DISCORD_ADAPTER" not in os.environ
+        and sys.platform == "win32"
+    ):
+        discord_selection = "windows"
     if speech_selection == "auto":
         speech_selection = "windows_sapi" if sys.platform == "win32" else "stub"
 
@@ -229,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             channel=namespace.browser_channel,
         )
+        discord = create_discord_adapter(discord_selection)
     except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
         instance_guard.release()
         print(f"Assistant startup failed: {error}")
@@ -241,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
             desktop=desktop,
             media=media,
             browser=browser,
+            discord=discord,
             audit_store=JsonlAuditStore(runtime_paths.audit_path),
         )
         if namespace.window:

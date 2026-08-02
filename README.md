@@ -4,13 +4,13 @@ VoiceControl is a Windows-first, USB-portable voice assistant. The long-term pro
 
 ## Project status
 
-Phase 5 visible browser and Google control is complete on top of the native Excel, speech, and media slices.
+Phase 6 deliberate Discord control is complete on top of the native Excel, speech, media, and browser slices.
 
 - The existing deterministic prototype is preserved as the implementation baseline.
 - Basic Excel control now works through typed input or controlled offline speech in the visible Windows shell.
-- Windows media plus visible browser and Google navigation now use dedicated native adapters; Discord follows next.
+- Discord launch, allowlisted navigation, visible drafts, and inspected device state now use Windows accessibility without user tokens or self-bot APIs.
 - Existing user-visible command behavior is preserved behind capability-neutral contracts.
-- The next implementation phase is deliberate Discord navigation, messaging, microphone, and camera control.
+- The next implementation phase is USB packaging, deployment, and recovery hardening.
 
 Planning documents:
 
@@ -25,6 +25,7 @@ Planning documents:
 - [Phase 3 baseline](docs/PHASE_3_BASELINE.md)
 - [Phase 4 baseline](docs/PHASE_4_BASELINE.md)
 - [Phase 5 baseline](docs/PHASE_5_BASELINE.md)
+- [Phase 6 baseline](docs/PHASE_6_BASELINE.md)
 
 ## Existing prototype
 
@@ -78,6 +79,15 @@ Phase 5 additionally provides:
 - direct URL navigation, Google search, tabs, history, refresh, scrolling, and page identity reporting
 - safe visible-link listing and numbered navigation without clicking page buttons or controls
 - download links excluded and no form submission, purchase, or outgoing-message actions
+
+Phase 6 additionally provides:
+
+- visible Discord launch and allowlisted server/channel or DM navigation
+- visible single-message drafting, editing, cancellation, and confirmed preparation
+- physical Enter remains required to send; Voice Control never submits a normal user's message
+- inspected Discord microphone and deafen state with privacy-reducing actions immediate and enabling actions confirmed
+- camera actions only when Discord exposes reliable state in the current call view
+- personal-token, self-bot, bulk-message, and background-message automation blocked
 
 ## Development environment
 - Active repository: `D:\VoiceControl`

@@ -20,6 +20,7 @@ from voice_control_usb.core.safety import SafetyClass, SafetyPolicy
 from voice_control_usb.core.session_context import PendingAction, SessionContext
 from voice_control_usb.core.workflows import WorkflowRegistry
 from voice_control_usb.desktop.adapter import DesktopAdapter, StubDesktopAdapter
+from voice_control_usb.discord.adapter import DiscordAdapter, StubDiscordAdapter
 from voice_control_usb.desktop.registry import AppAliasRegistry
 from voice_control_usb.excel.adapter import ExcelAdapter, StubExcelAdapter
 from voice_control_usb.executor.engine import ExecutionEngine
@@ -37,6 +38,7 @@ class AssistantApp:
         desktop: DesktopAdapter | None = None,
         media: MediaAdapter | None = None,
         browser: BrowserAdapter | None = None,
+        discord: DiscordAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
         pending_action_timeout_seconds: float | None = None,
         clock: Callable[[], float] | None = None,
@@ -50,6 +52,7 @@ class AssistantApp:
             desktop=desktop or StubDesktopAdapter(aliases=AppAliasRegistry.load_default()),
             media=media or StubMediaAdapter(),
             browser=browser or StubBrowserAdapter(),
+            discord=discord or StubDiscordAdapter(),
             workflow_registry=self.workflow_registry,
         )
         self.safety = SafetyPolicy(self.workflow_registry, self.executor.registry)

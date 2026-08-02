@@ -6,6 +6,29 @@ from voice_control_usb.core.parser import CommandParser
 
 
 class CommandParserTests(unittest.TestCase):
+    def test_parse_discord_commands(self) -> None:
+        cases = [
+            ("open discord", "open_discord", {}),
+            ("go to discord team", "discord_navigate", {"alias": "team"}),
+            ("draft discord message hello", "discord_set_draft", {"text": "hello"}),
+            ("cancel discord draft", "discord_cancel_draft", {}),
+            ("send discord draft", "discord_prepare_send", {}),
+            ("mute microphone", "discord_mute_microphone", {}),
+            ("unmute microphone", "discord_unmute_microphone", {}),
+            ("deafen discord", "discord_deafen", {}),
+            ("undeafen discord", "discord_undeafen", {}),
+            ("disable camera", "discord_disable_camera", {}),
+            ("enable camera", "discord_enable_camera", {}),
+            ("discord status", "discord_report_status", {}),
+        ]
+        parser = CommandParser()
+        for text, action, arguments in cases:
+            with self.subTest(text=text):
+                result = parser.parse(text)
+                assert result.command is not None
+                self.assertEqual(result.command.action, action)
+                self.assertEqual(result.command.arguments, arguments)
+
     def test_parse_browser_and_google_commands(self) -> None:
         parser = CommandParser()
         cases = [

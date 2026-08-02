@@ -91,11 +91,15 @@ Exit: a separate visible browser profile supports deterministic navigation and G
 
 Goal: support deliberate Discord communication and voice-state controls without self-bot behavior.
 
+Status: complete on the `agent/phase-6-discord` branch.
+
 - Open or focus Discord and navigate to configured servers, channels, or direct messages.
-- Draft one message visibly, allow edit/cancel, and require confirmation to send.
+- Draft one message visibly, allow edit/cancel, and require confirmation before focusing the reviewed draft; the user physically presses Enter to send.
 - Read and set microphone, deafen, and camera state where reliable state inspection is available.
 - Mute and disable camera immediately; confirm before unmuting or enabling camera.
 - Block personal-token automation, background sending, bulk messaging, and scraping.
+
+Exit: Discord exposes inspected microphone/deafen state through accessibility mode, drafts remain visible and unsent, privacy-sensitive enabling actions require confirmation, and no normal-user API or automated send path exists.
 
 ## Phase 7 — USB packaging and hardening
 

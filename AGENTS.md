@@ -4,9 +4,9 @@
 This repository builds a modular Windows voice assistant with a USB-portable deployment model. Basic Microsoft Excel control is the first production capability, not the limit of the product.
 
 ## Current project stage
-Phase 5 browser and Google control is complete. A visible isolated Chrome or Edge profile now supports deterministic navigation, Google search, tabs, history, page reporting, scrolling, and safe numbered links without form or download actions. Phase 6 Discord is next.
+Phase 6 Discord control is complete. The installed client runs with Windows accessibility state for allowlisted navigation, visible unsent drafts, and inspected mic/deafen/camera controls. A confirmed draft still requires the user's physical Enter key, preserving the no-self-bot boundary. Phase 7 packaging and hardening is next.
 
-Do not broaden implementation scope beyond Discord until the Phase 6 deliberate messaging and device-state workflow works on native Windows.
+Do not broaden implementation scope beyond packaging and hardening until the Phase 7 trusted USB deployment and recovery workflow is verified.
 
 ## Primary goal
 Build a reliable modular system with these layers:

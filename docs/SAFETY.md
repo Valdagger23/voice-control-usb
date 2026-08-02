@@ -80,9 +80,10 @@
 
 ## Communication and privacy safety
 
-- Draft outgoing messages visibly and require explicit confirmation before sending.
+- Draft Discord messages visibly, require confirmation before send preparation, and leave the final Enter key to the user.
 - Do not implement background or bulk messaging.
 - Do not automate Discord user accounts through personal tokens or self-bot behavior.
+- Do not simulate the final Discord send action for a normal user account.
 - Mute microphones and disable cameras immediately when requested.
 - Require confirmation before unmuting a microphone or enabling a camera.
 - Prefer explicit desired-state commands over blind toggles.

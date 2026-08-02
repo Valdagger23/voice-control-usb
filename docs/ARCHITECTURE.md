@@ -64,7 +64,7 @@ Uses Playwright with an assistant-owned persistent Chrome or Edge profile. The a
 
 ### Discord
 
-Begins with visible, user-initiated navigation and state-aware microphone/camera controls. Message text is drafted visibly and requires confirmation before sending. Personal account tokens, self-bots, background sending, and bulk messaging are prohibited.
+Uses the installed Discord client in forced renderer-accessibility mode and Windows UI Automation. Navigation is limited to configured `discord://` target aliases. Draft text uses the accessible composer value pattern, and confirmed preparation only focuses the unchanged draft; the user physically sends it. Microphone, deafen, and camera actions run only from readable button state. Personal account tokens, self-bots, simulated sending, background sending, and bulk messaging are prohibited.
 
 ## Development model
 

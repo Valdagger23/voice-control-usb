@@ -35,7 +35,7 @@ def run_windows_shell(app: AssistantApp, transcriber: SpeechTranscriber) -> None
     )
     ttk.Label(
         frame,
-        text="Excel, media, and browser control - type a command or push to talk.",
+        text="Excel, media, browser, and Discord - type or push to talk.",
     ).pack(anchor="w", pady=(2, 14))
 
     status = tk.StringVar(value="Ready")

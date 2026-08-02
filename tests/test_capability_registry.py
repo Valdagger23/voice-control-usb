@@ -130,7 +130,7 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertEqual(result.message, "Excel session ready (stub)")
         self.assertEqual(
             {capability.capability_id for capability in engine.capabilities},
-            {"excel", "desktop", "media", "browser", "workflow"},
+            {"excel", "desktop", "media", "browser", "discord", "workflow"},
         )
         assert type_text is not None
         self.assertTrue(type_text.reversible)

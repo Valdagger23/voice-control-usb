@@ -13,6 +13,24 @@
 
 ## Supported commands
 
+### Discord commands
+
+- `open discord`
+- `go to discord <ALIAS>`
+- `draft discord message <TEXT>`
+- `edit discord message <TEXT>`
+- `cancel discord draft`
+- `send discord draft` (confirmation prepares and focuses it; you press Enter)
+- `mute microphone`
+- `unmute microphone` (confirmation required)
+- `deafen discord`
+- `undeafen discord` (confirmation required)
+- `disable camera`
+- `enable camera` (confirmation required)
+- `discord status`
+
+Discord target aliases come from `VOICE_CONTROL_USB_DISCORD_TARGETS`. Message submission is never automated for a normal Discord account. User-token and bulk-send phrases are explicitly blocked.
+
 ### Browser and Google commands
 
 - `browse to https://example.com`

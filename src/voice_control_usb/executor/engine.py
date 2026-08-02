@@ -18,6 +18,8 @@ from voice_control_usb.core.models import Command
 from voice_control_usb.core.workflows import WorkflowRegistry
 from voice_control_usb.desktop.adapter import DesktopAdapter
 from voice_control_usb.desktop.capability import DesktopCapability
+from voice_control_usb.discord.adapter import DiscordAdapter, StubDiscordAdapter
+from voice_control_usb.discord.capability import DiscordCapability
 from voice_control_usb.excel.adapter import ExcelAdapter
 from voice_control_usb.excel.capability import ExcelCapability
 from voice_control_usb.media.adapter import MediaAdapter, StubMediaAdapter
@@ -33,6 +35,7 @@ class ExecutionEngine:
         desktop: DesktopAdapter,
         media: MediaAdapter | None = None,
         browser: BrowserAdapter | None = None,
+        discord: DiscordAdapter | None = None,
         workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         # Compatibility views retained while callers migrate to capabilities.
@@ -40,6 +43,7 @@ class ExecutionEngine:
         self.desktop = desktop
         self.media = media or StubMediaAdapter()
         self.browser = browser or StubBrowserAdapter()
+        self.discord = discord or StubDiscordAdapter()
         self.handlers = {}
 
         self.workflow_registry = workflow_registry or WorkflowRegistry.load_default()
@@ -50,6 +54,7 @@ class ExecutionEngine:
         self._register_capability(DesktopCapability(desktop))
         self._register_capability(MediaCapability(self.media))
         self._register_capability(BrowserCapability(self.browser))
+        self._register_capability(DiscordCapability(self.discord))
         self.workflow_registry.validate_contracts(self.registry)
         self._register_capability(
             WorkflowCapability(
