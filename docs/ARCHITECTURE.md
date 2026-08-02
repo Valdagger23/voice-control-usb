@@ -1,55 +1,74 @@
 # Architecture
 
-## Overview
-The system is split into two deployable components:
+## Product boundary
 
-1. A local Windows starter/watcher installed on each laptop.
-2. A USB-hosted main assistant that owns parsing, execution, and proposal logging.
+VoiceControl is a capability-based Windows assistant. Excel is the first production capability; media/Spotify, browser/Google, and Discord are later capability packs using the same command, policy, context, and audit pipeline.
 
-The starter is intentionally narrow. It detects a trusted USB payload and launches the assistant from the USB. It does not perform automation itself and does not depend on unsafe autorun behavior.
+## Deployable components
 
-## Phase-1 boundaries
-Phase 1 is deterministic by design.
+1. **Local Windows starter** — discovers and verifies the trusted USB payload, prevents duplicate launches, and starts the assistant without performing automation.
+2. **USB-hosted assistant** — owns the user interface, input, command processing, safety policy, capability routing, session state, and audit history.
 
-- Speech-to-text is only a boundary module, not yet a production integration.
-- Command parsing is strict and rule-based.
-- Execution routes only pre-approved commands.
-- Unknown or unsupported commands are logged as reviewable proposals.
-- Excel automation is represented by an object-level adapter interface before any fallback automation is considered.
+The system does not use USB autorun. Account credentials remain in the prepared Windows user's credential store rather than portable plaintext files.
 
-## Module layout
-- `voice_control_usb.starter`
-  Local trusted USB validation and launch behavior.
-- `voice_control_usb.assistant`
-  Assistant orchestration and CLI entrypoint for USB-hosted runtime.
-- `voice_control_usb.core`
-  Shared command models, command registry, workflow registry, parser, and proposal persistence.
-- `voice_control_usb.executor`
-  Deterministic routing from parsed commands to approved handlers.
-- `voice_control_usb.desktop`
-  Allowlisted desktop action boundary with stub and Windows implementations.
-- `voice_control_usb.excel`
-  Excel automation abstraction, with a safe stub in phase 1.
-- `voice_control_usb.audio`
-  Future speech-to-text integration boundary kept outside the deterministic core.
+## Target layers
+
+1. **Assistant shell** — tray/window UI, lifecycle, visible state, and typed fallback.
+2. **Input adapters** — push-to-talk activation and pluggable speech transcription.
+3. **Interpretation** — normalize input into a typed command or a reviewable unsupported proposal.
+4. **Policy** — classify the command as allowed, confirmation-required, or blocked.
+5. **Context** — maintain application-neutral session state plus isolated capability state.
+6. **Capability registry** — resolve an approved action to exactly one capability handler.
+7. **Capability adapters** — Excel COM first; later media, browser, Google, and Discord adapters.
+8. **Workflow engine** — execute validated sequences of approved actions without arbitrary code hooks.
+9. **Audit and recovery** — record commands, decisions, results, errors, and reversible mutations.
 
 ## Runtime flow
-1. The local starter checks for a trusted marker on the USB root.
-2. The starter launches the USB-hosted assistant entrypoint.
-3. Speech input is expected to become plain text before parsing.
-4. The parser converts text into a normalized command or an unsupported proposal.
-5. The executor runs only recognized commands through approved modules, including explicit Excel context, allowlisted desktop actions, and registry-driven workflows.
-6. Unsupported input is appended to a proposal log for later review.
 
-## Deployment model
-- Windows is the target runtime for the starter and future Excel COM integration.
-- WSL is the development environment.
-- The repository keeps Windows-sensitive logic behind small interfaces so unit tests can run in WSL.
-- Adapter selection is explicit so the assistant can stay on the stub adapter in WSL and switch to the COM adapter on Windows when requested.
+1. The user activates typed or push-to-talk input.
+2. Speech is transcribed into text.
+3. Interpretation produces a typed command with validated arguments.
+4. Policy evaluates the action and current state.
+5. Confirmation is requested when required.
+6. The capability registry routes the command to an approved adapter.
+7. The adapter returns a structured result and optional reversible-change record.
+8. The shell reports the outcome and persists an audit event.
 
-## Excel strategy
-- Preferred path: COM or object-level APIs through a dedicated adapter.
-- Deferred path: keyboard or mouse fallback only if an operation cannot be achieved safely through object control.
-- The stub adapter remains the default path for WSL development and automated tests.
-- The Windows COM adapter now implements the current deterministic command slice behind the same interface.
-- The adapter boundary now exposes workbook and worksheet context so future Excel commands can target explicit state instead of relying only on the active selection.
+## Capability contract
+
+Every capability declares:
+
+- stable capability and action identifiers
+- typed argument and result schemas
+- safety class for each action
+- required configuration and credentials
+- state it owns and exposes
+- whether the action is reversible
+- stub and native adapter behavior
+
+The core must not import capability-specific implementation details.
+
+## Capability roadmap
+
+### Excel
+
+Uses COM/object-level control. Keyboard and mouse automation are not the default Excel strategy.
+
+### Media and Spotify
+
+Begins with Windows media-session controls. Account-specific Spotify actions use OAuth and explicit scopes later.
+
+### Browser and Google
+
+Begins with visible browser navigation and Google search. Private Google services use separate OAuth-backed adapters with least-privilege scopes.
+
+### Discord
+
+Begins with visible, user-initiated navigation and state-aware microphone/camera controls. Message text is drafted visibly and requires confirmation before sending. Personal account tokens, self-bots, background sending, and bulk messaging are prohibited.
+
+## Development model
+
+- Windows is the production and native-integration target.
+- WSL or cross-platform Python may run deterministic unit tests against stubs.
+- Windows-sensitive code remains behind narrow interfaces.
+- Each phase must preserve the existing test baseline while adding contract and integration coverage.

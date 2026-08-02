@@ -1,6 +1,8 @@
 """Smoke tests for the execution skeleton."""
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from voice_control_usb.core.models import Command
 from voice_control_usb.core.workflows import WorkflowRegistry
@@ -206,36 +208,37 @@ class ExecutionEngineTests(unittest.TestCase):
     def test_executor_routes_desktop_actions_through_stub_adapter(self) -> None:
         engine = self.make_engine()
 
-        outputs = [
-            engine.execute(
-                Command(
-                    name="open_app",
-                    action="open_app",
-                    arguments={"app_alias": "notepad"},
-                    source_text="open app notepad",
-                )
-            ),
-            engine.execute(
-                Command(
-                    name="open_url",
-                    action="open_url",
-                    arguments={"url": "https://example.com"},
-                    source_text="open url https://example.com",
-                )
-            ),
-            engine.execute(
-                Command(
-                    name="open_folder",
-                    action="open_folder",
-                    arguments={"path": "/tmp"},
-                    source_text="open folder /tmp",
-                )
-            ),
-        ]
+        with TemporaryDirectory() as folder_path:
+            outputs = [
+                engine.execute(
+                    Command(
+                        name="open_app",
+                        action="open_app",
+                        arguments={"app_alias": "notepad"},
+                        source_text="open app notepad",
+                    )
+                ),
+                engine.execute(
+                    Command(
+                        name="open_url",
+                        action="open_url",
+                        arguments={"url": "https://example.com"},
+                        source_text="open url https://example.com",
+                    )
+                ),
+                engine.execute(
+                    Command(
+                        name="open_folder",
+                        action="open_folder",
+                        arguments={"path": folder_path},
+                        source_text=f"open folder {folder_path}",
+                    )
+                ),
+            ]
 
         self.assertEqual(outputs[0], "Opened app alias: notepad (stub)")
         self.assertEqual(outputs[1], "Opened URL: https://example.com (stub)")
-        self.assertEqual(outputs[2], "Opened folder: /tmp (stub)")
+        self.assertEqual(outputs[2], f"Opened folder: {Path(folder_path)} (stub)")
 
     def test_executor_routes_confirm_required_desktop_actions_after_approval(self) -> None:
         engine = self.make_engine()

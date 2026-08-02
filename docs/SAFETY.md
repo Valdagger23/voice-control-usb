@@ -5,6 +5,8 @@
 - Avoid silent escalation from text input to broad OS control.
 - Prefer explicit rejection over unsafe guessing.
 - Maintain a clean separation between trusted launch logic and automation behavior.
+- Make privacy-sensitive and outward-facing actions visible and deliberate.
+- Keep credentials out of portable plaintext storage.
 
 ## USB safety
 - Do not rely on USB autorun.
@@ -51,6 +53,23 @@
 - Do not use `shell=True`.
 - Limit URLs to approved `http` and `https` forms.
 - Keep destructive OS-control actions gated or blocked even when the parser recognizes them.
+
+## Communication and privacy safety
+
+- Draft outgoing messages visibly and require explicit confirmation before sending.
+- Do not implement background or bulk messaging.
+- Do not automate Discord user accounts through personal tokens or self-bot behavior.
+- Mute microphones and disable cameras immediately when requested.
+- Require confirmation before unmuting a microphone or enabling a camera.
+- Prefer explicit desired-state commands over blind toggles.
+- If current microphone or camera state cannot be verified, report uncertainty instead of guessing.
+
+## Credential safety
+
+- Store OAuth refresh tokens and service credentials in a Windows credential store.
+- Do not store account tokens, passwords, or client secrets as plaintext on the USB.
+- Request the least privilege required by each capability.
+- Treat Google services, Spotify, and Discord as separate authorization boundaries.
 
 ## AI safety for early phases
 - AI may help draft reviewed proposals later, but phase 1 does not allow live self-modifying code.

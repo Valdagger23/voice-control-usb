@@ -1,9 +1,28 @@
-# voice-control-usb
+# VoiceControl
 
-Windows-first, USB-portable voice automation system with deterministic Excel control, modular command parsing, and a safe path for AI-assisted command expansion later.
+VoiceControl is a Windows-first, USB-portable voice assistant. The long-term product supports modular Windows capabilities; the first production capability is deliberately limited to reliable Microsoft Excel control.
 
-## Phase 1 goal
-Build the deterministic core:
+## Project status
+
+Phase 0 is the approved product and architecture reset.
+
+- The existing deterministic prototype is preserved as the implementation baseline.
+- Basic Excel control is the first vertical slice.
+- Media/Spotify, browser/Google, and Discord capabilities follow after Excel is proven on Windows.
+- Current runtime behavior still reflects the earlier prototype until the phased refactor begins.
+
+Planning documents:
+
+- [Product vision](docs/PRODUCT_VISION.md)
+- [MVP scope](docs/MVP.md)
+- [Target architecture](docs/ARCHITECTURE.md)
+- [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
+- [Safety model](docs/SAFETY.md)
+- [Phase 0 baseline](docs/PHASE_0_BASELINE.md)
+
+## Existing prototype
+
+The repository currently provides a tested deterministic foundation:
 - trusted local starter skeleton
 - USB-hosted assistant shell
 - strict parser
@@ -13,10 +32,18 @@ Build the deterministic core:
 - tests
 
 ## Development environment
-- WSL
-- Python virtual environment
+- Active repository: `D:\VoiceControl`
+- Windows Python 3.12 or newer in a project-local `.venv`
+- WSL remains supported for deterministic stub-based tests when the USB is mounted there
 - VS Code
 - Codex
+
+Windows setup:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+```
 
 ## Trusted USB starter
 - Local starter config is JSON-based and separate from the USB-hosted assistant
@@ -52,6 +79,15 @@ Build the deterministic core:
 - Details: [docs/WORKFLOWS.md](docs/WORKFLOWS.md)
 
 ## Local verification
+
+Windows baseline:
+
+- `.\.venv\Scripts\python.exe -m unittest discover -s tests -v`
+- `.\.venv\Scripts\python.exe -m voice_control_usb "open excel"`
+- `.\.venv\Scripts\python.exe -m voice_control_usb "open excel and go to A1"`
+
+WSL baseline, when the USB filesystem is mounted:
+
 - `PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel"`
 - `PYTHONPATH=src .venv/bin/python -m voice_control_usb "open excel and go to A1"`
